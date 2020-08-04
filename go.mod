@@ -30,6 +30,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1 // indirect
 	github.com/prometheus/common v0.10.0
+	github.com/prometheus/prometheus v1.8.2-0.20200629082805-315564210816
 	github.com/samuel/go-zookeeper v0.0.0-20200724154423-2164a8ac840e // indirect
 	github.com/sirupsen/logrus v1.6.0 // indirect
 	github.com/thanos-io/thanos v0.14.0
@@ -49,9 +50,9 @@ require (
 
 // Compatibility constraints
 replace (
-	k8s.io/client-go => k8s.io/client-go v0.18.3
+	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.4.0
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200629082805-315564210816
+	k8s.io/client-go => k8s.io/client-go v0.18.3
 	k8s.io/klog => k8s.io/klog v0.3.1
 	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20190228160746-b3a7cee44a30
-	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.4.0
 )
