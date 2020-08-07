@@ -2,7 +2,9 @@ package ingest
 
 import (
 	"fmt"
-	"log"
+	"io"
+	"os"
+	"text/tabwriter"
 	"time"
 
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -19,64 +21,84 @@ func ExampleAggregatedIngestor() {
 	opts.Min.Enabled = true
 	opts.Max.Enabled = true
 
-	ai := AggregatedIngestor{
-		Resolution:  30 * time.Minute,
-		aggrOptions: opts,
-	}
-	for _, s := range sampleSeries() {
-		ai.Ingest(s)
-	}
-	df := ai.Flush()
+	a := NewAggregator(30*time.Minute, opts)
 
-	fmt.Printf("Dataframe aggregated over %s: %+v", ai.Resolution, df)
-	// Output: Dataframe aggregated over 30m0s: {}
+	for _, s := range sampleSeries() {
+		err := a.Ingest(s)
+		if err != nil {
+			fmt.Print(err)
+			return
+		}
+	}
+	a.Finalize()
+	df := a.Flush()
+
+	w := newExampleWriter(os.Stdout)
+	defer w.Close()
+
+	w.Write(df)
+	// Output:
+	// | sample_start  sample_end  min_time  max_time  _count  _sum  _min  _max  |
+	// | 10:30:00      11:00:00    11:04:02  11:04:02  1       2     2     2     |
+	// | 11:00:00      11:30:00    11:19:02  11:19:02  1       2     2     2     |
+	// | 10:30:00      11:00:00    10:34:02  10:34:02  1       1     1     1     |
+	// | 11:00:00      11:30:00    11:04:02  11:19:02  2       4     2     2     |
+	// | 10:30:00      11:00:00    10:34:02  10:49:02  2       4     2     2     |
 }
 
 func ExampleContinuousIngestor() {
-	ai := AggregatedIngestor{Resolution: 30 * time.Minute}
-	w := dummyWriter{}
+	opts := NewAggregationsOptions()
+	opts.Max.Enabled = true
+	a := NewAggregator(30*time.Minute, opts)
+	w := newExampleWriter(os.Stdout)
+	defer w.Close()
 
 	ci := ContinuousIngestor{
-		aggr: ai,
-		w: w,
+		aggr: a,
+		w:    w,
 	}
 
 	for _, s := range sampleSeries() {
-		ci.Ingest(s)
+		err := ci.Ingest(s)
+		if err != nil {
+			fmt.Print(err)
+			return
+		}
 	}
-
-	fmt.Printf("Dataframe aggregated over %s and sent to writer: %+v", ai.Resolution, w)
-	// Output: Dataframe aggregated over 30m0s and sent to writer: {}
-}
-
-type dummyWriter struct{}
-
-func (_ dummyWriter) Write(df dataframe.Dataframe) error {
-	return nil
-}
-
-func (_ dummyWriter) Close() error {
-	return nil
+	ci.Finalize()
+	// Output:
+	// | sample_start  sample_end  min_time  max_time  _max  |
+	// | 10:30:00      11:00:00    11:04:02  11:04:02  2     |
+	// | 10:30:00      11:00:00    10:34:02  10:34:02  1     |
+	// | 10:30:00      11:00:00    10:34:02  10:49:02  2     |
+	// | 11:00:00      11:30:00    11:19:02  11:19:02  2     |
+	// | 11:00:00      11:30:00    11:04:02  11:19:02  2     |
 }
 
 type sample struct {
-	t int64
+	t time.Time
 	v float64
 }
 
 func sampleSeries() []*storepb.Series {
-	baseT := timestamp.FromTime(time.Date(2020, 5, 4, 10, 42, 00, 0, time.UTC))
+	baseT := time.Date(2020, 5, 4, 10, 4, 2, 0, time.UTC)
 	metricLabelsBase := []storepb.Label{{Name: "__name__", Value: "net_conntrack_dialer_conn_attempted_total"}}
 
 	series1Labels := append(metricLabelsBase, storepb.Label{Name: "dialer_name", Value: "prometheus"})
-	minute := int64(time.Minute)
-	series1Samples := []sample{{baseT, 0}, {baseT + 15*minute, 1}, {baseT + 30*minute, 2}, {baseT + 45*minute, 2}}
+	minute := time.Minute
+	series1Samples := []sample{
+		{baseT, 0}, {baseT.Add(15 * minute), 1}, {baseT.Add(30 * minute), 2}, {baseT.Add(45 * minute), 2},
+	}
 
 	series2Labels := append(metricLabelsBase, storepb.Label{Name: "dialer_name", Value: "default"})
-	series2Samples := []sample{{baseT, 0}, {baseT + 15*minute, 1}, {baseT + 60*minute, 1}, {baseT + 75*minute, 2}}
+	series2Samples := []sample{
+		{baseT, 0}, {baseT.Add(15 * minute), 1}, {baseT.Add(60 * minute), 2}, {baseT.Add(75 * minute), 2},
+	}
 
 	series3Labels := append(metricLabelsBase, storepb.Label{Name: "dialer_name", Value: "alertmanager"})
-	series3Samples := []sample{{baseT, 0}, {baseT + 30*minute, 1}, {baseT + 60*minute, 2}, {baseT + 75*minute, 2}}
+	series3Samples := []sample{
+		{baseT, 0}, {baseT.Add(30 * minute), 1}, {baseT.Add(60 * minute), 2}, {baseT.Add(75 * minute), 2},
+	}
 
 	seriesSlice := []*storepb.Series{
 		buildSampleSeries(series1Labels, series1Samples),
@@ -95,20 +117,85 @@ func buildSampleSeries(lset []storepb.Label, smplChunks ...[]sample) *storepb.Se
 		c := chunkenc.NewXORChunk()
 		a, err := c.Appender()
 		if err != nil {
-			log.Fatal(err)
+			fmt.Print("Error building a sample series", err)
+			return &s
 		}
 
 		for _, smpl := range smpls {
-			a.Append(smpl.t, smpl.v)
+			a.Append(timestamp.FromTime(smpl.t), smpl.v)
 		}
 
 		ch := storepb.AggrChunk{
-			MinTime: smpls[0].t,
-			MaxTime: smpls[len(smpls)-1].t,
+			MinTime: timestamp.FromTime(smpls[0].t),
+			MaxTime: timestamp.FromTime(smpls[len(smpls)-1].t),
 			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
 		}
 
 		s.Chunks = append(s.Chunks, ch)
 	}
 	return &s
+}
+
+// Implements output.Writer
+type exampleWriter struct {
+	w       *tabwriter.Writer
+	started bool
+}
+
+func newExampleWriter(w io.Writer) *exampleWriter {
+	tabw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	return &exampleWriter{w: tabw}
+}
+
+func (w *exampleWriter) Write(df dataframe.Dataframe) error {
+	if !w.started {
+		w.PrintHeader(df)
+		w.started = true
+	}
+	i := df.RowsIterator()
+	for i.Next() {
+		w.PrintRow(df.Schema(), i.At())
+	}
+	return nil
+}
+
+func (w *exampleWriter) PrintHeader(df dataframe.Dataframe) {
+	// Adding | <-   -> | around the lines to avoid dealing with training spaces
+	// in example output checking
+	fmt.Fprint(w.w, "| ")
+	for _, c := range df.Schema() {
+		fmt.Fprintf(w.w, "%s\t", c.Name)
+	}
+	fmt.Fprint(w.w, "|\n")
+}
+
+func (w *exampleWriter) PrintRow(s dataframe.Schema, r dataframe.Row) {
+	fmt.Fprint(w.w, "| ")
+	for i, cell := range r {
+		c := s[i]
+		switch c.Type {
+		case dataframe.TypeString:
+			fmt.Fprintf(w.w, "%s\t", cell)
+		case dataframe.TypeFloat:
+			v := cell.(float64)
+			fmt.Fprintf(w.w, "%.0f\t", v)
+		case dataframe.TypeUint:
+			v := cell.(uint64)
+			fmt.Fprintf(w.w, "%d\t", v)
+		case dataframe.TypeTime:
+			v := cell.(time.Time)
+			fmt.Fprintf(w.w, "%s\t", v.Format("15:04:05"))
+		default:
+			fmt.Fprintf(w.w, "%s\t", cell)
+		}
+	}
+	fmt.Fprint(w.w, "|\n")
+}
+
+func (w exampleWriter) Close() error {
+	err := w.w.Flush()
+	if err != nil {
+		return err
+	}
+	return nil
 }

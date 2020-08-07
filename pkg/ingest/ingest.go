@@ -4,6 +4,9 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/thanos-community/obslytics/pkg/dataframe"
@@ -12,6 +15,7 @@ import (
 
 type Ingestor interface {
 	Ingest(*storepb.Series) error
+	Finalize() error
 }
 
 // Options for a single aggregation.
@@ -24,9 +28,10 @@ type AggrOption struct {
 
 // Collections of aggregations-related options. Determines what aggregations are enabled etc..
 type aggrsOptions struct {
-	// If true (default), the samples should repeat the same time for every day.
-	// This puts additional requirement for 24h to be divisible by the resolution.
-	MidnightAligned bool
+	// Function to suggest the time of the first sample based on the resolution
+	// and the initial time of a series. By default, it uses time.Truncate(resolution)
+	// to normalize against the beginning of epoch.
+	initSampleTimeFunc func(time.Duration, time.Time) time.Time
 
 	Sum   AggrOption
 	Count AggrOption
@@ -36,7 +41,9 @@ type aggrsOptions struct {
 
 // By default, all aggregations are disabled and target columns set with `_` prefix.
 func NewAggregationsOptions() (ao aggrsOptions) {
-	ao.MidnightAligned = true
+	ao.initSampleTimeFunc = func(res time.Duration, t time.Time) time.Time {
+		return t.Truncate(res).Add(res)
+	}
 
 	ao.Sum.Column = "_sum"
 	ao.Count.Column = "_count"
@@ -45,28 +52,214 @@ func NewAggregationsOptions() (ao aggrsOptions) {
 	return ao
 }
 
+type aggregatedSeries struct {
+	labels      labels.Labels
+	hash        uint64
+	sampleStart time.Time
+	sampleEnd   time.Time
+	minTime     time.Time
+	maxTime     time.Time
+	count       uint64
+	min         float64
+	max         float64
+	sum         float64
+}
+
 // Ingests the data and produces aggregations at the specified resolution.
-type AggregatedIngestor struct {
-	Resolution  time.Duration
-	aggrOptions aggrsOptions
+type aggregator struct {
+	Resolution   time.Duration
+	aggrsOptions aggrsOptions
+	activeSeries map[uint64]*aggregatedSeries
+	df           AggrDf
+}
+
+func newAggrDf(ao aggrsOptions) AggrDf {
+	schema := dataframe.Schema{
+		{Name: "sample_start", Type: dataframe.TypeTime},
+		{Name: "sample_end", Type: dataframe.TypeTime},
+		{Name: "min_time", Type: dataframe.TypeTime},
+		{Name: "max_time", Type: dataframe.TypeTime},
+	}
+
+	if ao.Count.Enabled {
+		schema = append(schema, dataframe.Column{Name: ao.Count.Column, Type: dataframe.TypeUint})
+	}
+	if ao.Sum.Enabled {
+		schema = append(schema, dataframe.Column{Name: ao.Sum.Column, Type: dataframe.TypeFloat})
+	}
+	if ao.Min.Enabled {
+		schema = append(schema, dataframe.Column{Name: ao.Min.Column, Type: dataframe.TypeFloat})
+	}
+	if ao.Max.Enabled {
+		schema = append(schema, dataframe.Column{Name: ao.Max.Column, Type: dataframe.TypeFloat})
+	}
+	return AggrDf{seriesRecordSets: make(map[uint64]*SeriesRecordSet), schema: schema}
+}
+
+func NewAggregator(resolution time.Duration, aggrsOptions aggrsOptions) *aggregator {
+	return &aggregator{
+		Resolution:   resolution,
+		aggrsOptions: aggrsOptions,
+		activeSeries: make(map[uint64]*aggregatedSeries),
+		df:           newAggrDf(aggrsOptions),
+	}
+}
+
+type timeValue struct {
+	timestamp int64
+	value     float64
+}
+
+func decodeChunk(c storepb.AggrChunk) ([]timeValue, error) {
+	ret := make([]timeValue, 0, c.Size())
+	ce, err := chunkenc.FromData(chunkenc.EncXOR, c.Raw.Data)
+	if err != nil {
+		return ret, errors.Wrap(err, "Error while decoding a chunk")
+	}
+	i := ce.Iterator(nil)
+	for i.Next() {
+		ts, v := i.At()
+		ret = append(ret, timeValue{ts, v})
+	}
+	return ret, nil
+}
+
+// Ingest a single chunk provided via an iterator. For a specific searies, We
+// assume the iterator returns values ordered by the timestamp
+// The iterator is expected to already be at the point of the first sample after as.sampleStart
+func (a *aggregator) ingestChunk(as *aggregatedSeries, i chunkenc.Iterator) (*aggregatedSeries, error) {
+	var (
+		ts int64
+		v  float64
+		t  time.Time
+	)
+	for {
+		ts, v = i.At()
+		t = timestamp.Time(ts)
+		if t.Before(as.sampleStart) {
+			return as, errors.Errorf("Chunk timestamp %s is less than the sampleStart %s", t, as.sampleStart)
+		}
+		if t.After(as.sampleEnd) {
+			as = a.finalizeSample(as)
+		}
+
+		if as.count == 0 {
+			as.minTime = t
+			as.maxTime = t
+			as.min = v
+			as.max = v
+		}
+		if as.maxTime.After(t) {
+			return as, errors.Errorf("Incoming chunks are not sorted by timestamp: expected %s after %s", t, as.maxTime)
+		}
+		as.maxTime = t
+		as.count += 1
+		as.sum += v
+		if as.max < v {
+			as.max = v
+		}
+		if as.min > v {
+			as.min = v
+		}
+		if !i.Next() {
+			break
+		}
+	}
+	return as, nil
+}
+
+// Add the active aggregated series into the final dataframe when we've reached the
+// sample end time. Returns pointer to a new instance of the aggregatedSeries
+func (a *aggregator) finalizeSample(as *aggregatedSeries) *aggregatedSeries {
+	if as.count == 0 {
+		return as
+	}
+	rs, ok := a.df.seriesRecordSets[as.hash]
+	if !ok {
+		rs = a.df.addRecordSet(as.labels)
+	}
+
+	vals := map[string]interface{}{
+		"sample_start": as.sampleStart,
+		"sample_end":   as.sampleEnd,
+		"min_time":     as.minTime,
+		"max_time":     as.maxTime,
+	}
+	if a.aggrsOptions.Count.Enabled {
+		vals[a.aggrsOptions.Count.Column] = as.count
+	}
+	if a.aggrsOptions.Sum.Enabled {
+		vals[a.aggrsOptions.Sum.Column] = as.sum
+	}
+	if a.aggrsOptions.Min.Enabled {
+		vals[a.aggrsOptions.Min.Column] = as.min
+	}
+	if a.aggrsOptions.Max.Enabled {
+		vals[a.aggrsOptions.Max.Column] = as.max
+	}
+	rs.Records = append(rs.Records, Record{Values: vals})
+
+	as = &aggregatedSeries{
+		labels:      as.labels,
+		hash:        as.hash,
+		sampleStart: as.sampleEnd,
+		sampleEnd:   as.sampleEnd.Add(a.Resolution),
+	}
+	a.activeSeries[as.hash] = as
+	return as
 }
 
 // Ingest the data to an aggregated set.
-func (i AggregatedIngestor) Ingest(s *storepb.Series) error {
-	// TODO(inecas): implement
+func (a *aggregator) Ingest(s *storepb.Series) error {
+	if len(s.Chunks) == 0 {
+		return nil
+	}
+	ls := storepb.LabelsToPromLabels(s.Labels)
+
+	seriesHash := ls.Hash()
+	as, ok := a.activeSeries[seriesHash]
+	if !ok {
+		minTime := timestamp.Time(s.Chunks[0].MinTime)
+		sampleStart := a.aggrsOptions.initSampleTimeFunc(a.Resolution, minTime)
+		sampleEnd := sampleStart.Add(a.Resolution)
+		as = &aggregatedSeries{labels: ls, hash: seriesHash, sampleStart: sampleStart, sampleEnd: sampleEnd}
+		a.activeSeries[seriesHash] = as
+	}
+
+	for _, c := range s.Chunks {
+		ce, err := chunkenc.FromData(chunkenc.EncXOR, c.Raw.Data)
+		if err != nil {
+			return errors.Wrap(err, "Error while decoding a chunk")
+		}
+
+		i := ce.Iterator(nil)
+		i.Seek(timestamp.FromTime(as.sampleStart))
+		as, err = a.ingestChunk(as, i)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *aggregator) Finalize() error {
+	for _, as := range a.activeSeries {
+		a.finalizeSample(as)
+	}
 	return nil
 }
 
 // Return already aggregated data from previous samples while cleaning
 // the buffer.
-func (i AggregatedIngestor) Flush() dataframe.Dataframe {
-	// TODO(inecas): implement
-	return dataframe.Dataframe{}
+func (a *aggregator) Flush() dataframe.Dataframe {
+	df := a.df
+	a.df = newAggrDf(a.aggrsOptions)
+	return df
 }
 
 // Ingests the data while periodically flushing the aggregated results to the writer
 type ContinuousIngestor struct {
-	aggr AggregatedIngestor
+	aggr *aggregator
 	w    output.Writer
 }
 
@@ -86,8 +279,13 @@ func (ci ContinuousIngestor) Ingest(s *storepb.Series) error {
 	return nil
 }
 
-func (ci ContinuousIngestor) Finish() error {
-	err := ci.w.Write(ci.aggr.Flush())
+func (ci ContinuousIngestor) Finalize() error {
+	err := ci.aggr.Finalize()
+	if err != nil {
+		return errors.Wrap(err, "Error while finalizing the underlying ingestor")
+	}
+
+	err = ci.w.Write(ci.aggr.Flush())
 	if err != nil {
 		return errors.Wrap(err, "Error while writing on finish")
 	}
@@ -96,6 +294,5 @@ func (ci ContinuousIngestor) Finish() error {
 
 // Decides whether it's the right time to do the flushing right now
 func (ci ContinuousIngestor) shouldFlush() bool {
-	// TODO(inecas): implement
-	return false
+	return len(ci.aggr.df.seriesRecordSets) > 0
 }
