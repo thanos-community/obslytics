@@ -47,26 +47,25 @@ func ExampleAggregator() {
 
 }
 
-func ExampleContinuousIngestor() {
+func ExampleProcess() {
 	opts := NewAggregationsOptions()
 	opts.Max.Enabled = true
 	a := NewAggregator(30*time.Minute, opts)
 	w := example.NewExampleWriter(os.Stdout)
 	defer w.Close()
 
-	ci := ContinuousIngestor{
-		in: a,
-		w:  w,
-	}
-
 	for _, s := range sampleSeries() {
-		err := ci.Ingest(s)
+		err := Process(s, a, w)
 		if err != nil {
 			fmt.Print(err)
 			return
 		}
 	}
-	ci.Finalize()
+	err := ProcessFinalize(a, w)
+	if err != nil {
+		fmt.Print(err)
+		return
+	}
 	// Unordered output:
 	// | dialer_name   _sample_start  _sample_end  _min_time  _max_time  _max  |
 	// | default       10:30:00       11:00:00     11:04:02   11:04:02   2     |
@@ -74,6 +73,49 @@ func ExampleContinuousIngestor() {
 	// | prometheus    10:30:00       11:00:00     10:34:02   10:49:02   2     |
 	// | default       11:00:00       11:30:00     11:19:02   11:19:02   2     |
 	// | alertmanager  11:00:00       11:30:00     11:04:02   11:19:02   2     |
+}
+
+func ExampleProcessAll() {
+	opts := NewAggregationsOptions()
+	opts.Max.Enabled = true
+	a := NewAggregator(30*time.Minute, opts)
+	w := example.NewExampleWriter(os.Stdout)
+	defer w.Close()
+
+	i := NewSeriesIterator(sampleSeries())
+	err := ProcessAll(i, a, w)
+	if err != nil {
+		fmt.Print(err)
+		return
+	}
+	// Unordered output:
+	// | dialer_name   _sample_start  _sample_end  _min_time  _max_time  _max  |
+	// | default       10:30:00       11:00:00     11:04:02   11:04:02   2     |
+	// | alertmanager  10:30:00       11:00:00     10:34:02   10:34:02   1     |
+	// | prometheus    10:30:00       11:00:00     10:34:02   10:49:02   2     |
+	// | default       11:00:00       11:30:00     11:19:02   11:19:02   2     |
+	// | alertmanager  11:00:00       11:30:00     11:04:02   11:19:02   2     |
+}
+
+type seriesIterator struct {
+	series []input.Series
+	pos    int
+}
+
+func NewSeriesIterator(series []input.Series) *seriesIterator {
+	return &seriesIterator{series: series, pos: -1}
+}
+
+func (i *seriesIterator) Next() bool {
+	if i.pos == len(i.series)-1 {
+		return false
+	}
+	i.pos++
+	return true
+}
+
+func (i *seriesIterator) At() input.Series {
+	return i.series[i.pos]
 }
 
 type sample struct {
