@@ -2,16 +2,14 @@ package ingest
 
 import (
 	"fmt"
-	"io"
 	"os"
-	"text/tabwriter"
 	"time"
 
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
-	"github.com/thanos-community/obslytics/pkg/dataframe"
+	"github.com/thanos-community/obslytics/pkg/output/example"
 )
 
 func ExampleAggregator() {
@@ -33,7 +31,7 @@ func ExampleAggregator() {
 	a.Finalize()
 	df := a.Flush()
 
-	w := newExampleWriter(os.Stdout)
+	w := example.NewExampleWriter(os.Stdout)
 	defer w.Close()
 
 	w.Write(df)
@@ -51,7 +49,7 @@ func ExampleContinuousIngestor() {
 	opts := NewAggregationsOptions()
 	opts.Max.Enabled = true
 	a := NewAggregator(30*time.Minute, opts)
-	w := newExampleWriter(os.Stdout)
+	w := example.NewExampleWriter(os.Stdout)
 	defer w.Close()
 
 	ci := ContinuousIngestor{
@@ -135,68 +133,4 @@ func buildSampleSeries(lset []storepb.Label, smplChunks ...[]sample) *storepb.Se
 		s.Chunks = append(s.Chunks, ch)
 	}
 	return &s
-}
-
-// Implements output.Writer
-type exampleWriter struct {
-	w       *tabwriter.Writer
-	started bool
-}
-
-func newExampleWriter(w io.Writer) *exampleWriter {
-	tabw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	return &exampleWriter{w: tabw}
-}
-
-func (w *exampleWriter) Write(df dataframe.Dataframe) error {
-	if !w.started {
-		w.PrintHeader(df)
-		w.started = true
-	}
-	i := df.RowsIterator()
-	for i.Next() {
-		w.PrintRow(df.Schema(), i.At())
-	}
-	return nil
-}
-
-func (w *exampleWriter) PrintHeader(df dataframe.Dataframe) {
-	// Adding | <-   -> | around the lines to avoid dealing with training spaces
-	// in example output checking
-	fmt.Fprint(w.w, "| ")
-	for _, c := range df.Schema() {
-		fmt.Fprintf(w.w, "%s\t", c.Name)
-	}
-	fmt.Fprint(w.w, "|\n")
-}
-
-func (w *exampleWriter) PrintRow(s dataframe.Schema, r dataframe.Row) {
-	fmt.Fprint(w.w, "| ")
-	for i, cell := range r {
-		c := s[i]
-		switch c.Type {
-		case dataframe.TypeString:
-			fmt.Fprintf(w.w, "%s\t", cell)
-		case dataframe.TypeFloat:
-			v := cell.(float64)
-			fmt.Fprintf(w.w, "%.0f\t", v)
-		case dataframe.TypeUint:
-			v := cell.(uint64)
-			fmt.Fprintf(w.w, "%d\t", v)
-		case dataframe.TypeTime:
-			v := cell.(time.Time)
-			fmt.Fprintf(w.w, "%s\t", v.Format("15:04:05"))
-		default:
-			fmt.Fprintf(w.w, "%s\t", cell)
-		}
-	}
-	fmt.Fprint(w.w, "|\n")
-}
-
-func (w exampleWriter) Close() error {
-	err := w.w.Flush()
-	if err != nil {
-		return err
-	}
-	return nil
 }
