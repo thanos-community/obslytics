@@ -13,7 +13,7 @@ import (
 	"github.com/thanos-community/obslytics/pkg/input"
 )
 
-// Implements input.Series
+// StoreSeries implements input.Series
 type StoreSeries struct{ StoreS *storepb.Series }
 
 func (s StoreSeries) Labels() labels.Labels {
@@ -31,7 +31,7 @@ func (s StoreSeries) ChunkIterator() (input.ChunkIterator, error) {
 	return NewStoreChunkIterator(s.StoreS.Chunks)
 }
 
-// Implements dataframe.ChunkIterator.
+// storeChunkIterator implements dataframe.ChunkIterator.
 type storeChunkIterator struct {
 	chunks        []storepb.AggrChunk
 	decodedChunks []chunkenc.Chunk

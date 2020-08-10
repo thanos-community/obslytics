@@ -14,7 +14,7 @@ import (
 	"github.com/thanos-community/obslytics/pkg/input"
 )
 
-// Options for a single aggregation.
+// AggrOption defines options for a single aggregation.
 type AggrOption struct {
 	// Should the aggregation be used?
 	Enabled bool
@@ -22,7 +22,8 @@ type AggrOption struct {
 	Column string
 }
 
-// Collections of aggregations-related options. Determines what aggregations are enabled etc..
+// aggrsOptions ia a collections of aggregations-related options. Determines
+// what aggregations are enabled etc..
 type aggrsOptions struct {
 	// Function to suggest the time of the first sample based on the resolution
 	// and the initial time of a series. By default, it uses time.Truncate(resolution)
@@ -61,7 +62,6 @@ type aggregatedSeries struct {
 	sum         float64
 }
 
-// Ingests the data and produces aggregations at the specified resolution.
 type aggregator struct {
 	Resolution   time.Duration
 	aggrsOptions aggrsOptions
@@ -69,11 +69,8 @@ type aggregator struct {
 	df           AggrDf
 }
 
+// aggregator ingests the data and produces aggregations at the specified resolution.
 type Aggregator struct{ aggregator }
-
-func newAggrDf(ao aggrsOptions) AggrDf {
-	return AggrDf{seriesRecordSets: make(map[uint64]*SeriesRecordSet)}
-}
 
 func NewAggregator(resolution time.Duration, aggrsOptions aggrsOptions) *aggregator {
 	return &aggregator{
@@ -84,9 +81,8 @@ func NewAggregator(resolution time.Duration, aggrsOptions aggrsOptions) *aggrega
 	}
 }
 
-type timeValue struct {
-	timestamp int64
-	value     float64
+func newAggrDf(ao aggrsOptions) AggrDf {
+	return AggrDf{seriesRecordSets: make(map[uint64]*SeriesRecordSet)}
 }
 
 // Ingest a single chunk provided via an iterator. For a specific searies, We
@@ -224,6 +220,23 @@ func (a *aggregator) Finalize() error {
 	return nil
 }
 
+// Return already aggregated data from previous samples while cleaning
+// the buffer.
+func (a *aggregator) Flush() (dataframe.Dataframe, bool) {
+	if len(a.df.seriesRecordSets) == 0 {
+		return a.df, false
+	}
+
+	df := a.df
+
+	// We postpone the schema calculation to the time just before sending the df out
+	// so that we can use the ingested data to determine the labels to be exported.
+	df.schema = a.getSchema()
+
+	a.df = newAggrDf(a.aggrsOptions)
+	return df, true
+}
+
 // Assumes all series having the same labels and just takes the first
 // series to get the label names.
 // The returned strings are always sorted alphabetically.
@@ -283,21 +296,4 @@ func (a *aggregator) getSchema() dataframe.Schema {
 	}
 
 	return schema
-}
-
-// Return already aggregated data from previous samples while cleaning
-// the buffer.
-func (a *aggregator) Flush() (dataframe.Dataframe, bool) {
-	if len(a.df.seriesRecordSets) == 0 {
-		return a.df, false
-	}
-
-	df := a.df
-
-	// We postpone the schema calculation to the time just before sending the df out
-	// so that we can use the ingested data to determine the labels to be exported.
-	df.schema = a.getSchema()
-
-	a.df = newAggrDf(a.aggrsOptions)
-	return df, true
 }

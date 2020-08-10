@@ -10,11 +10,11 @@ type Ingestor interface {
 	// by timestamp.
 	Ingest(input.Series) error
 
-	// Return already ingested data from previous samples while cleaning
-	// the buffer. The second return value determines, if any data was returned.
-	Flush() (df dataframe.Dataframe, ok bool)
-
 	// Indicate no more Ingest calls to be done. It allows finalizing the active
 	// data even when not reaching next sample time.
 	Finalize() error
+
+	// Return already ingested data from previous samples while cleaning
+	// the buffer. The second return value determines, if any data was returned.
+	Flush() (df dataframe.Dataframe, ok bool)
 }

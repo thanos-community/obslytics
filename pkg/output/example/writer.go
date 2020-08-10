@@ -9,10 +9,10 @@ import (
 	"github.com/thanos-community/obslytics/pkg/dataframe"
 )
 
-// Formats the dataframe into format usable for testing in examples. Uses tabwriter
-// to produce the table in readable format and shortens fields when possible
-// (such as using only time part of a timestamp) so it fits nicer into the
-// output.
+// ExampleWriter formats the dataframe into format usable for testing in
+// examples. Uses tabwriter to produce the table in readable format and shortens
+// fields when possible (such as using only time part of a timestamp) so it fits
+// nicer into the output.
 // Implements output.Writer.
 type ExampleWriter struct {
 	w       *tabwriter.Writer

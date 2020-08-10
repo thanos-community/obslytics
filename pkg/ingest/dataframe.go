@@ -8,7 +8,7 @@ import (
 	"github.com/thanos-community/obslytics/pkg/dataframe"
 )
 
-// implements Dataframe
+// AggrDf implements Dataframe
 type AggrDf struct {
 	schema           dataframe.Schema
 	seriesRecordSets map[uint64]*SeriesRecordSet
@@ -36,7 +36,7 @@ func (df AggrDf) RowsIterator() dataframe.RowsIterator {
 	return &aggrDfIterator{seriesRecordSets: rs, schema: df.schema, seriesPos: 0, recordPos: -1}
 }
 
-// implements dataframe.RowIterator
+// aggrDfIterator implements dataframe.RowIterator
 type aggrDfIterator struct {
 	seriesRecordSets []SeriesRecordSet
 	schema           dataframe.Schema
@@ -74,22 +74,13 @@ func (i *aggrDfIterator) At() dataframe.Row {
 	return ret
 }
 
-// Set of records for specific labels values.
+// SeriesRecordSet is a set of records for specific labels values.
 type SeriesRecordSet struct {
 	Labels  labels.Labels
 	Records []Record
 }
 
-// A single instance of values for specific sample
+// Record is a single instance of values for specific sample
 type Record struct {
-	// // what time the sample starts at
-	// SampleStart time.Time
-	// // what time the sample ends at
-	// SampleEnd time.Time
-	// // what was the minimal time in the timeseries withing the sample
-	// MinTime time.Time
-	// // what was the maximal time in the timeseries withing the sample
-	// MaxTime time.Time
-	// // mapping of aggregated values
 	Values map[string]interface{}
 }
