@@ -265,6 +265,7 @@ func (a *aggregator) getLabelNames() []string {
 	if len(ls) == 0 {
 		for _, s := range a.activeSeries {
 			ls = s.labels
+			break
 		}
 	}
 	for _, l := range ls {
