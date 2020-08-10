@@ -22,9 +22,9 @@ type AggrOption struct {
 	Column string
 }
 
-// aggrsOptions ia a collections of aggregations-related options. Determines
+// AggrsOptions ia a collections of aggregations-related options. Determines
 // what aggregations are enabled etc..
-type aggrsOptions struct {
+type AggrsOptions struct {
 	// Function to suggest the time of the first sample based on the resolution
 	// and the initial time of a series. By default, it uses time.Truncate(resolution)
 	// to normalize against the beginning of epoch.
@@ -37,16 +37,26 @@ type aggrsOptions struct {
 }
 
 // By default, all aggregations are disabled and target columns set with `_` prefix.
-func NewAggregationsOptions() (ao aggrsOptions) {
-	ao.initSampleTimeFunc = func(res time.Duration, t time.Time) time.Time {
+var defaultAggrsOptions = AggrsOptions{
+	initSampleTimeFunc: func(res time.Duration, t time.Time) time.Time {
 		return t.Truncate(res).Add(res)
-	}
+	},
 
-	ao.Sum.Column = "_sum"
-	ao.Count.Column = "_count"
-	ao.Min.Column = "_min"
-	ao.Max.Column = "_max"
-	return ao
+	Sum:   AggrOption{Column: "_sum"},
+	Count: AggrOption{Column: "_count"},
+	Min:   AggrOption{Column: "_min"},
+	Max:   AggrOption{Column: "_max"},
+}
+
+type AggrOptionFunc func(*AggrsOptions)
+
+func evalOptions(optFuncs []AggrOptionFunc) *AggrsOptions {
+	opt := &AggrsOptions{}
+	*opt = defaultAggrsOptions
+	for _, o := range optFuncs {
+		o(opt)
+	}
+	return opt
 }
 
 type aggregatedSeries struct {
@@ -64,7 +74,7 @@ type aggregatedSeries struct {
 
 type aggregator struct {
 	Resolution   time.Duration
-	aggrsOptions aggrsOptions
+	aggrsOptions AggrsOptions
 	activeSeries map[uint64]*aggregatedSeries
 	df           AggrDf
 }
@@ -72,7 +82,8 @@ type aggregator struct {
 // aggregator ingests the data and produces aggregations at the specified resolution.
 type Aggregator struct{ aggregator }
 
-func NewAggregator(resolution time.Duration, aggrsOptions aggrsOptions) *aggregator {
+func NewAggregator(resolution time.Duration, optFuncs ...AggrOptionFunc) *aggregator {
+	aggrsOptions := *evalOptions(optFuncs)
 	return &aggregator{
 		Resolution:   resolution,
 		aggrsOptions: aggrsOptions,
@@ -81,7 +92,7 @@ func NewAggregator(resolution time.Duration, aggrsOptions aggrsOptions) *aggrega
 	}
 }
 
-func newAggrDf(ao aggrsOptions) AggrDf {
+func newAggrDf(ao AggrsOptions) AggrDf {
 	return AggrDf{seriesRecordSets: make(map[uint64]*SeriesRecordSet)}
 }
 

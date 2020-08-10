@@ -15,13 +15,12 @@ import (
 )
 
 func ExampleAggregator() {
-	opts := NewAggregationsOptions()
-	opts.Sum.Enabled = true
-	opts.Count.Enabled = true
-	opts.Min.Enabled = true
-	opts.Max.Enabled = true
-
-	a := NewAggregator(30*time.Minute, opts)
+	a := NewAggregator(30*time.Minute, func(o *AggrsOptions) {
+		o.Sum.Enabled = true
+		o.Count.Enabled = true
+		o.Min.Enabled = true
+		o.Max.Enabled = true
+	})
 
 	for _, s := range sampleSeries() {
 		err := a.Ingest(s)
@@ -48,9 +47,7 @@ func ExampleAggregator() {
 }
 
 func ExampleProcess() {
-	opts := NewAggregationsOptions()
-	opts.Max.Enabled = true
-	a := NewAggregator(30*time.Minute, opts)
+	a := NewAggregator(30*time.Minute, func(o *AggrsOptions) { o.Max.Enabled = true })
 	w := example.NewExampleWriter(os.Stdout)
 	defer w.Close()
 
@@ -76,9 +73,7 @@ func ExampleProcess() {
 }
 
 func ExampleProcessAll() {
-	opts := NewAggregationsOptions()
-	opts.Max.Enabled = true
-	a := NewAggregator(30*time.Minute, opts)
+	a := NewAggregator(30*time.Minute, func(o *AggrsOptions) { o.Max.Enabled = true })
 	w := example.NewExampleWriter(os.Stdout)
 	defer w.Close()
 
