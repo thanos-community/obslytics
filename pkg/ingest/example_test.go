@@ -9,6 +9,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
+	"github.com/thanos-community/obslytics/pkg/input"
+	"github.com/thanos-community/obslytics/pkg/input/storeapi"
 	"github.com/thanos-community/obslytics/pkg/output/example"
 )
 
@@ -29,7 +31,7 @@ func ExampleAggregator() {
 		}
 	}
 	a.Finalize()
-	df := a.Flush()
+	df, _ := a.Flush()
 
 	w := example.NewExampleWriter(os.Stdout)
 	defer w.Close()
@@ -53,8 +55,8 @@ func ExampleContinuousIngestor() {
 	defer w.Close()
 
 	ci := ContinuousIngestor{
-		aggr: a,
-		w:    w,
+		in: a,
+		w:  w,
 	}
 
 	for _, s := range sampleSeries() {
@@ -79,7 +81,7 @@ type sample struct {
 	v float64
 }
 
-func sampleSeries() []*storepb.Series {
+func sampleSeries() []input.Series {
 	baseT := time.Date(2020, 5, 4, 10, 4, 2, 0, time.UTC)
 	metricLabelsBase := []storepb.Label{{Name: "__name__", Value: "net_conntrack_dialer_conn_attempted_total"}}
 
@@ -99,7 +101,7 @@ func sampleSeries() []*storepb.Series {
 		{baseT, 0}, {baseT.Add(30 * minute), 1}, {baseT.Add(60 * minute), 2}, {baseT.Add(75 * minute), 2},
 	}
 
-	seriesSlice := []*storepb.Series{
+	seriesSlice := []input.Series{
 		buildSampleSeries(series1Labels, series1Samples),
 		buildSampleSeries(series2Labels, series2Samples),
 		buildSampleSeries(series3Labels, series3Samples),
@@ -107,7 +109,7 @@ func sampleSeries() []*storepb.Series {
 	return seriesSlice
 }
 
-func buildSampleSeries(lset []storepb.Label, smplChunks ...[]sample) *storepb.Series {
+func buildSampleSeries(lset []storepb.Label, smplChunks ...[]sample) input.Series {
 	var s storepb.Series
 
 	s.Labels = lset
@@ -117,7 +119,7 @@ func buildSampleSeries(lset []storepb.Label, smplChunks ...[]sample) *storepb.Se
 		a, err := c.Appender()
 		if err != nil {
 			fmt.Print("Error building a sample series", err)
-			return &s
+			return nil
 		}
 
 		for _, smpl := range smpls {
@@ -132,5 +134,5 @@ func buildSampleSeries(lset []storepb.Label, smplChunks ...[]sample) *storepb.Se
 
 		s.Chunks = append(s.Chunks, ch)
 	}
-	return &s
+	return storeapi.StoreSeries{StoreS: &s}
 }
