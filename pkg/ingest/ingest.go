@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"sort"
 	"time"
 
 	"github.com/pkg/errors"
@@ -14,7 +15,11 @@ import (
 )
 
 type Ingestor interface {
+	// Ingest a single series. It expects the series' chunks to be sorted
+	// by timestamp.
 	Ingest(*storepb.Series) error
+	// Indicate no more Ingest calls to be done. It allows finalizing the active
+	// data even when not reaching next sample time.
 	Finalize() error
 }
 
@@ -73,27 +78,10 @@ type aggregator struct {
 	df           AggrDf
 }
 
-func newAggrDf(ao aggrsOptions) AggrDf {
-	schema := dataframe.Schema{
-		{Name: "sample_start", Type: dataframe.TypeTime},
-		{Name: "sample_end", Type: dataframe.TypeTime},
-		{Name: "min_time", Type: dataframe.TypeTime},
-		{Name: "max_time", Type: dataframe.TypeTime},
-	}
+type Aggregator struct{ aggregator }
 
-	if ao.Count.Enabled {
-		schema = append(schema, dataframe.Column{Name: ao.Count.Column, Type: dataframe.TypeUint})
-	}
-	if ao.Sum.Enabled {
-		schema = append(schema, dataframe.Column{Name: ao.Sum.Column, Type: dataframe.TypeFloat})
-	}
-	if ao.Min.Enabled {
-		schema = append(schema, dataframe.Column{Name: ao.Min.Column, Type: dataframe.TypeFloat})
-	}
-	if ao.Max.Enabled {
-		schema = append(schema, dataframe.Column{Name: ao.Max.Column, Type: dataframe.TypeFloat})
-	}
-	return AggrDf{seriesRecordSets: make(map[uint64]*SeriesRecordSet), schema: schema}
+func newAggrDf(ao aggrsOptions) AggrDf {
+	return AggrDf{seriesRecordSets: make(map[uint64]*SeriesRecordSet)}
 }
 
 func NewAggregator(resolution time.Duration, aggrsOptions aggrsOptions) *aggregator {
@@ -180,11 +168,19 @@ func (a *aggregator) finalizeSample(as *aggregatedSeries) *aggregatedSeries {
 	}
 
 	vals := map[string]interface{}{
-		"sample_start": as.sampleStart,
-		"sample_end":   as.sampleEnd,
-		"min_time":     as.minTime,
-		"max_time":     as.maxTime,
+		"_sample_start": as.sampleStart,
+		"_sample_end":   as.sampleEnd,
+		"_min_time":     as.minTime,
+		"_max_time":     as.maxTime,
 	}
+
+	for _, l := range as.labels {
+		if l.Name == "__name__" {
+			continue
+		}
+		vals[l.Name] = l.Value
+	}
+
 	if a.aggrsOptions.Count.Enabled {
 		vals[a.aggrsOptions.Count.Column] = as.count
 	}
@@ -249,10 +245,76 @@ func (a *aggregator) Finalize() error {
 	return nil
 }
 
+// Assumes all series having the same labels and just takes the first
+// series to get the label names.
+// The returned strings are always sorted alphabetically.
+func (a *aggregator) getLabelNames() []string {
+	var (
+		ls  labels.Labels
+		ret []string
+	)
+	for _, s := range a.df.seriesRecordSets {
+		ls = s.Labels
+		break
+	}
+
+	// we've not found labels in df, look at the active series instead
+	if len(ls) == 0 {
+		for _, s := range a.activeSeries {
+			ls = s.labels
+		}
+	}
+	for _, l := range ls {
+		if l.Name == "__name__" {
+			continue
+		}
+		ret = append(ret, l.Name)
+	}
+	sort.Strings(ret)
+	return ret
+}
+
+func (a *aggregator) getSchema() dataframe.Schema {
+	ao := a.aggrsOptions
+	schema := dataframe.Schema{}
+
+	for _, l := range a.getLabelNames() {
+		schema = append(schema, dataframe.Column{Name: l, Type: dataframe.TypeString})
+	}
+
+	timeColumns := []dataframe.Column{
+		{Name: "_sample_start", Type: dataframe.TypeTime},
+		{Name: "_sample_end", Type: dataframe.TypeTime},
+		{Name: "_min_time", Type: dataframe.TypeTime},
+		{Name: "_max_time", Type: dataframe.TypeTime},
+	}
+	schema = append(schema, timeColumns...)
+
+	if ao.Count.Enabled {
+		schema = append(schema, dataframe.Column{Name: ao.Count.Column, Type: dataframe.TypeUint})
+	}
+	if ao.Sum.Enabled {
+		schema = append(schema, dataframe.Column{Name: ao.Sum.Column, Type: dataframe.TypeFloat})
+	}
+	if ao.Min.Enabled {
+		schema = append(schema, dataframe.Column{Name: ao.Min.Column, Type: dataframe.TypeFloat})
+	}
+	if ao.Max.Enabled {
+		schema = append(schema, dataframe.Column{Name: ao.Max.Column, Type: dataframe.TypeFloat})
+	}
+
+	return schema
+}
+
 // Return already aggregated data from previous samples while cleaning
 // the buffer.
 func (a *aggregator) Flush() dataframe.Dataframe {
 	df := a.df
+
+	// We postpone the schema calculation to the time just before sending the df out
+	// so that we can use the ingested data to determine the labels to be exported.
+	df.schema = a.getSchema()
+
 	a.df = newAggrDf(a.aggrsOptions)
 	return df
 }
