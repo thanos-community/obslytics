@@ -92,6 +92,7 @@ func ExampleProcessAll() {
 	// | alertmanager  11:00:00       11:30:00     11:04:02   11:19:02   2     |
 }
 
+// seriesIterator implements input.SeriesIterator
 type seriesIterator struct {
 	series []input.Series
 	pos    int

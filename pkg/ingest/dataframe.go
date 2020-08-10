@@ -8,7 +8,7 @@ import (
 	"github.com/thanos-community/obslytics/pkg/dataframe"
 )
 
-// AggrDf implements Dataframe
+// AggrDf implements dataframe.Dataframe
 type AggrDf struct {
 	schema           dataframe.Schema
 	seriesRecordSets map[uint64]*SeriesRecordSet

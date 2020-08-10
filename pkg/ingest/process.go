@@ -29,24 +29,6 @@ func Process(s input.Series, in Ingestor, w output.Writer) error {
 	return nil
 }
 
-// Ingest all series from the SeriesIterator.
-func ProcessAll(si input.SeriesIterator, in Ingestor, w output.Writer) error {
-	for si.Next() {
-		s := si.At()
-		err := Process(s, in, w)
-		if err != nil {
-			return err
-		}
-	}
-
-	err := ProcessFinalize(in, w)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func ProcessFinalize(in Ingestor, w output.Writer) error {
 	err := in.Finalize()
 	if err != nil {
@@ -61,6 +43,24 @@ func ProcessFinalize(in Ingestor, w output.Writer) error {
 	err = w.Write(df)
 	if err != nil {
 		return errors.Wrap(err, "Error while writing on finish")
+	}
+
+	return nil
+}
+
+// Ingest all series from the SeriesIterator.
+func ProcessAll(si input.SeriesIterator, in Ingestor, w output.Writer) error {
+	for si.Next() {
+		s := si.At()
+		err := Process(s, in, w)
+		if err != nil {
+			return err
+		}
+	}
+
+	err := ProcessFinalize(in, w)
+	if err != nil {
+		return err
 	}
 
 	return nil
