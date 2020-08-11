@@ -112,7 +112,7 @@ func (a *aggregator) ingestChunk(as *aggregatedSeries, i input.ChunkIterator) (*
 			return as, errors.Errorf("Chunk timestamp %s is less than the sampleStart %s", t, as.sampleStart)
 		}
 		if t.After(as.sampleEnd) {
-			as = a.finalizeSample(as)
+			as = a.finalizeSample(as, t)
 		}
 
 		if as.count == 0 {
@@ -140,12 +140,7 @@ func (a *aggregator) ingestChunk(as *aggregatedSeries, i input.ChunkIterator) (*
 	return as, nil
 }
 
-// Add the active aggregated series into the final dataframe when we've reached the
-// sample end time. Returns pointer to a new instance of the aggregatedSeries
-func (a *aggregator) finalizeSample(as *aggregatedSeries) *aggregatedSeries {
-	if as.count == 0 {
-		return as
-	}
+func (a *aggregator) addSeriesToDf(as *aggregatedSeries) {
 	rs, ok := a.df.seriesRecordSets[as.hash]
 	if !ok {
 		rs = a.df.addRecordSet(as.labels)
@@ -178,12 +173,26 @@ func (a *aggregator) finalizeSample(as *aggregatedSeries) *aggregatedSeries {
 		vals[a.aggrsOptions.Max.Column] = as.max
 	}
 	rs.Records = append(rs.Records, Record{Values: vals})
+}
+
+// Add the active aggregated series into the final dataframe when we've reached the
+// sample end time. Returns pointer to a new instance of the aggregatedSeries
+func (a *aggregator) finalizeSample(as *aggregatedSeries, nextT time.Time) *aggregatedSeries {
+	if as.count > 0 {
+		a.addSeriesToDf(as)
+	}
+
+	// calculate the next sample cycle to contain the nextT time. First calculate how many
+	// whole resolution cycles are between current sampleStart and nextT and then add
+	// those cycles to the current sampleStart
+	nextSampleCycle := ((nextT.Unix() - as.sampleStart.Unix())/(int64)(a.Resolution/time.Second))
+	nextSampleStart := as.sampleStart.Add((time.Duration(nextSampleCycle))*a.Resolution)
 
 	as = &aggregatedSeries{
 		labels:      as.labels,
 		hash:        as.hash,
-		sampleStart: as.sampleEnd,
-		sampleEnd:   as.sampleEnd.Add(a.Resolution),
+		sampleStart: nextSampleStart,
+		sampleEnd:   nextSampleStart.Add(a.Resolution),
 	}
 	a.activeSeries[as.hash] = as
 	return as
@@ -226,7 +235,7 @@ func (a *aggregator) Ingest(s input.Series) error {
 
 func (a *aggregator) Finalize() error {
 	for _, as := range a.activeSeries {
-		a.finalizeSample(as)
+		a.finalizeSample(as, as.sampleEnd)
 	}
 	return nil
 }

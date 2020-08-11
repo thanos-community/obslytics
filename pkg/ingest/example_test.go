@@ -38,11 +38,10 @@ func ExampleAggregator() {
 	w.Write(df)
 	// Unordered output:
 	// | dialer_name   _sample_start  _sample_end  _min_time  _max_time  _count  _sum  _min  _max  |
-	// | default       10:30:00       11:00:00     11:04:02   11:04:02   1       2     2     2     |
-	// | default       11:00:00       11:30:00     11:19:02   11:19:02   1       2     2     2     |
 	// | alertmanager  10:30:00       11:00:00     10:34:02   10:34:02   1       1     1     1     |
 	// | alertmanager  11:00:00       11:30:00     11:04:02   11:19:02   2       4     2     2     |
 	// | prometheus    10:30:00       11:00:00     10:34:02   10:49:02   2       4     2     2     |
+	// | default       11:00:00       11:30:00     11:04:02   11:19:02   2       4     2     2     |
 
 }
 
@@ -65,10 +64,9 @@ func ExampleProcess() {
 	}
 	// Unordered output:
 	// | dialer_name   _sample_start  _sample_end  _min_time  _max_time  _max  |
-	// | default       10:30:00       11:00:00     11:04:02   11:04:02   2     |
 	// | alertmanager  10:30:00       11:00:00     10:34:02   10:34:02   1     |
 	// | prometheus    10:30:00       11:00:00     10:34:02   10:49:02   2     |
-	// | default       11:00:00       11:30:00     11:19:02   11:19:02   2     |
+	// | default       11:00:00       11:30:00     11:04:02   11:19:02   2     |
 	// | alertmanager  11:00:00       11:30:00     11:04:02   11:19:02   2     |
 }
 
@@ -85,10 +83,9 @@ func ExampleProcessAll() {
 	}
 	// Unordered output:
 	// | dialer_name   _sample_start  _sample_end  _min_time  _max_time  _max  |
-	// | default       10:30:00       11:00:00     11:04:02   11:04:02   2     |
 	// | alertmanager  10:30:00       11:00:00     10:34:02   10:34:02   1     |
 	// | prometheus    10:30:00       11:00:00     10:34:02   10:49:02   2     |
-	// | default       11:00:00       11:30:00     11:19:02   11:19:02   2     |
+	// | default       11:00:00       11:30:00     11:04:02   11:19:02   2     |
 	// | alertmanager  11:00:00       11:30:00     11:04:02   11:19:02   2     |
 }
 
@@ -112,6 +109,10 @@ func (i *seriesIterator) Next() bool {
 
 func (i *seriesIterator) At() input.Series {
 	return i.series[i.pos]
+}
+
+func (i *seriesIterator) Close() error {
+	return nil
 }
 
 type sample struct {
