@@ -40,8 +40,9 @@ require (
 	golang.org/x/sys v0.0.0-20200802091954-4b90ce9b60b3 // indirect
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e // indirect
 	google.golang.org/genproto v0.0.0-20200731012542-8145dea6a485 // indirect
-	google.golang.org/grpc v1.31.0 // indirect
+	google.golang.org/grpc v1.31.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
+	gopkg.in/yaml.v2 v2.3.0
 	k8s.io/api v0.18.6 // indirect
 	k8s.io/client-go v11.0.0+incompatible // indirect
 	k8s.io/klog/v2 v2.3.0 // indirect

@@ -6,16 +6,31 @@ import (
 
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	http_util "github.com/thanos-io/thanos/pkg/http"
 )
 
+// InputConfig contains the options determining the endpoint to talk to.
+type InputConfig struct {
+	Endpoint string `yaml:"endpoint"`
+	TLSConfig http_util.TLSConfig `yaml:"tls_config"`
+}
+
+// SeriesParams determines what data should be loaded from the input
+type SeriesParams struct {
+	Metric string
+	MinTime time.Time
+	MaxTime time.Time
+}
+
 type Input interface {
-	Read(ctx context.Context) (SeriesIterator, error)
+	Open(context.Context, SeriesParams) (SeriesIterator, error)
 }
 
 // SeriesIterator iterates through all series in tn the input.
 type SeriesIterator interface {
 	Next() bool
 	At() Series
+	Close() error
 }
 
 // Series exposes data for a single series (determined by a label)
