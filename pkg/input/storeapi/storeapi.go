@@ -23,7 +23,7 @@ import (
 // storeAPIInput implements input.Input
 type storeAPIInput struct {
 	logger log.Logger
-	conf input.InputConfig
+	conf   input.InputConfig
 }
 
 func NewStoreAPIInput(logger log.Logger, conf input.InputConfig) (storeAPIInput, error) {
@@ -58,17 +58,17 @@ func (i storeAPIInput) Open(ctx context.Context, params input.SeriesParams) (inp
 	})
 	return &storeSeriesIterator{
 		logger: i.logger,
-		ctx: ctx,
-		conn: conn,
+		ctx:    ctx,
+		conn:   conn,
 		client: seriesClient}, nil
 }
 
 // storeSeriesIterator implements input.SeriesIterator
 type storeSeriesIterator struct {
-	logger log.Logger
-	ctx context.Context
-	conn *grpc.ClientConn
-	client storepb.Store_SeriesClient
+	logger        log.Logger
+	ctx           context.Context
+	conn          *grpc.ClientConn
+	client        storepb.Store_SeriesClient
 	currentSeries *storepb.Series
 }
 
@@ -103,7 +103,6 @@ func (i *storeSeriesIterator) Close() error {
 
 	return nil
 }
-
 
 // StoreSeries implements input.Series
 type StoreSeries struct{ StoreS *storepb.Series }

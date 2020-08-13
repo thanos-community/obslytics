@@ -185,8 +185,8 @@ func (a *aggregator) finalizeSample(as *aggregatedSeries, nextT time.Time) *aggr
 	// calculate the next sample cycle to contain the nextT time. First calculate how many
 	// whole resolution cycles are between current sampleStart and nextT and then add
 	// those cycles to the current sampleStart
-	nextSampleCycle := ((nextT.Unix() - as.sampleStart.Unix())/(int64)(a.Resolution/time.Second))
-	nextSampleStart := as.sampleStart.Add((time.Duration(nextSampleCycle))*a.Resolution)
+	nextSampleCycle := ((nextT.Unix() - as.sampleStart.Unix()) / (int64)(a.Resolution/time.Second))
+	nextSampleStart := as.sampleStart.Add((time.Duration(nextSampleCycle)) * a.Resolution)
 
 	as = &aggregatedSeries{
 		labels:      as.labels,

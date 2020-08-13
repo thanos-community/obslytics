@@ -35,6 +35,8 @@ require (
 	github.com/sirupsen/logrus v1.6.0 // indirect
 	github.com/thanos-io/thanos v0.14.0
 	github.com/uber/jaeger-client-go v2.25.0+incompatible // indirect
+	github.com/xitongsys/parquet-go v1.5.2
+	github.com/xitongsys/parquet-go-source v0.0.0-20200805105948-52b27ba08556
 	go.uber.org/automaxprocs v1.3.0
 	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de // indirect
 	golang.org/x/sys v0.0.0-20200802091954-4b90ce9b60b3 // indirect

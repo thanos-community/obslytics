@@ -11,13 +11,13 @@ import (
 
 // InputConfig contains the options determining the endpoint to talk to.
 type InputConfig struct {
-	Endpoint string `yaml:"endpoint"`
+	Endpoint  string              `yaml:"endpoint"`
 	TLSConfig http_util.TLSConfig `yaml:"tls_config"`
 }
 
 // SeriesParams determines what data should be loaded from the input
 type SeriesParams struct {
-	Metric string
+	Metric  string
 	MinTime time.Time
 	MaxTime time.Time
 }

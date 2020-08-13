@@ -3,25 +3,24 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/run"
 	"github.com/thanos-community/obslytics/pkg/input"
+	"github.com/thanos-community/obslytics/pkg/output"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-community/obslytics/pkg/ingest"
 	infactory "github.com/thanos-community/obslytics/pkg/input/factory"
-	"github.com/thanos-community/obslytics/pkg/output/example"
-	// outfactory "github.com/thanos-community/obslytics/pkg/output/factory"
+	outfactory "github.com/thanos-community/obslytics/pkg/output/factory"
 )
 
 func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command("export", "Export Observability Data into popular analytics formats.")
 	inputFlag := extflag.RegisterPathOrContent(cmd, "input", "YAML for input configuration.", true)
-	// outputFlag := extflag.RegisterPathOrContent(cmd, "ouput", "YAML for output configuration.", true)
+	outputFlag := extflag.RegisterPathOrContent(cmd, "ouput", "YAML for output configuration.", false)
 
 	serParams := input.SeriesParams{}
 	cmd.Flag("metric", "Name of the metric to export").Required().StringVar(&serParams.Metric)
@@ -32,6 +31,9 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 		Required().String()
 	resolution := cmd.Flag("resolution", "Sample resolution (e.g. 30m)").
 		Required().Duration()
+
+	outParams := output.OutputParams{}
+	cmd.Flag("out", "Output file").Required().StringVar(&outParams.OutFile)
 
 	m["export"] = func(g *run.Group, logger log.Logger) error {
 		minTime, err := time.Parse(timeFmt, *minTimeStr)
@@ -69,17 +71,19 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				o.Max.Enabled = true
 			})
 
-			// TODO(inecas): connect the output configuration
-			// outputConfig, err := outputFlag.Content()
-			// if err != nil {
-			// 	return err
-			// }
-			// out, err := outfactory.Parse(outputConfig)
-			// if err != nil {
-			// 	return err
-			// }
+			outputConfig, err := outputFlag.Content()
+			if err != nil {
+				return err
+			}
+			out, err := outfactory.Parse(outputConfig)
+			if err != nil {
+				return err
+			}
 
-			w := example.NewExampleWriter(os.Stdout)
+			w, err := out.Open(ctx, outParams)
+			if err != nil {
+				return err
+			}
 			defer w.Close()
 
 			err = ingest.ProcessAll(ser, a, w)
