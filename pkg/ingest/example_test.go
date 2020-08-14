@@ -38,10 +38,13 @@ func ExampleAggregator() {
 	w.Write(df)
 	// Unordered output:
 	// | dialer_name   _sample_start  _sample_end  _min_time  _max_time  _count  _sum  _min  _max  |
+	// | prometheus    10:00:00       10:30:00     10:04:02   10:19:02   2       1     0     1     |
+	// | prometheus    10:30:00       11:00:00     10:34:02   10:49:02   2       4     2     2     |
+	// | default       10:00:00       10:30:00     10:04:02   10:19:02   2       1     0     1     |
+	// | default       11:00:00       11:30:00     11:04:02   11:19:02   2       4     2     2     |
+	// | alertmanager  10:00:00       10:30:00     10:04:02   10:04:02   1       0     0     0     |
 	// | alertmanager  10:30:00       11:00:00     10:34:02   10:34:02   1       1     1     1     |
 	// | alertmanager  11:00:00       11:30:00     11:04:02   11:19:02   2       4     2     2     |
-	// | prometheus    10:30:00       11:00:00     10:34:02   10:49:02   2       4     2     2     |
-	// | default       11:00:00       11:30:00     11:04:02   11:19:02   2       4     2     2     |
 
 }
 
@@ -64,10 +67,14 @@ func ExampleProcess() {
 	}
 	// Unordered output:
 	// | dialer_name   _sample_start  _sample_end  _min_time  _max_time  _max  |
+	// | prometheus    10:00:00       10:30:00     10:04:02   10:19:02   1     |
+	// | default       10:00:00       10:30:00     10:04:02   10:19:02   1     |
+	// | alertmanager  10:00:00       10:30:00     10:04:02   10:04:02   0     |
 	// | alertmanager  10:30:00       11:00:00     10:34:02   10:34:02   1     |
 	// | prometheus    10:30:00       11:00:00     10:34:02   10:49:02   2     |
 	// | default       11:00:00       11:30:00     11:04:02   11:19:02   2     |
 	// | alertmanager  11:00:00       11:30:00     11:04:02   11:19:02   2     |
+
 }
 
 func ExampleProcessAll() {
@@ -83,10 +90,14 @@ func ExampleProcessAll() {
 	}
 	// Unordered output:
 	// | dialer_name   _sample_start  _sample_end  _min_time  _max_time  _max  |
+	// | prometheus    10:00:00       10:30:00     10:04:02   10:19:02   1     |
+	// | default       10:00:00       10:30:00     10:04:02   10:19:02   1     |
+	// | alertmanager  10:00:00       10:30:00     10:04:02   10:04:02   0     |
 	// | alertmanager  10:30:00       11:00:00     10:34:02   10:34:02   1     |
 	// | prometheus    10:30:00       11:00:00     10:34:02   10:49:02   2     |
 	// | default       11:00:00       11:30:00     11:04:02   11:19:02   2     |
 	// | alertmanager  11:00:00       11:30:00     11:04:02   11:19:02   2     |
+
 }
 
 // seriesIterator implements input.SeriesIterator

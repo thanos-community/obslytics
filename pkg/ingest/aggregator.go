@@ -39,7 +39,7 @@ type AggrsOptions struct {
 // By default, all aggregations are disabled and target columns set with `_` prefix.
 var defaultAggrsOptions = AggrsOptions{
 	initSampleTimeFunc: func(res time.Duration, t time.Time) time.Time {
-		return t.Truncate(res).Add(res)
+		return t.Truncate(res)
 	},
 
 	Sum:   AggrOption{Column: "_sum"},
