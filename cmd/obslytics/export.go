@@ -22,8 +22,9 @@ import (
 
 func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command("export", "Export Observability Data into popular analytics formats.")
-	inputFlag := extflag.RegisterPathOrContent(cmd, "input", "YAML for input configuration.", true)
-	outputFlag := extflag.RegisterPathOrContent(cmd, "ouput", "YAML for output configuration.", false)
+	inputFlag := extflag.RegisterPathOrContent(cmd, "input-cfg", "YAML for input configuration.", true)
+	// TODO(inecas): add support for output configuration
+	outputFlag := extflag.RegisterPathOrContent(cmd, "ouput-cfg", "YAML for output configuration.", false)
 
 	serParams := input.SeriesParams{}
 	cmd.Flag("metric", "Name of the metric to export").Required().StringVar(&serParams.Metric)
@@ -58,11 +59,11 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			inputConfig, err := inputFlag.Content()
+			inputCfg, err := inputFlag.Content()
 			if err != nil {
 				return err
 			}
-			in, err := infactory.Parse(logger, inputConfig)
+			in, err := infactory.Parse(logger, inputCfg)
 			if err != nil {
 				return err
 			}
@@ -80,11 +81,11 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				o.Max.Enabled = true
 			})
 
-			outputConfig, err := outputFlag.Content()
+			outputCfg, err := outputFlag.Content()
 			if err != nil {
 				return err
 			}
-			out, err := outfactory.Parse(outputConfig)
+			out, err := outfactory.Parse(outputCfg)
 			if err != nil {
 				return err
 			}

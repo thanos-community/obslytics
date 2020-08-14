@@ -83,7 +83,6 @@ func (w *parquetWriter) Write(df dataframe.Dataframe) error {
 }
 
 func (w *parquetWriter) Close() error {
-	fmt.Printf("Closing parqw\n")
 	if w.parqw != nil {
 		err := w.parqw.WriteStop()
 		if err != nil {
