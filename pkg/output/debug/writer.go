@@ -1,4 +1,4 @@
-package example
+package debug
 
 import (
 	"fmt"
@@ -7,24 +7,28 @@ import (
 	"time"
 
 	"github.com/thanos-community/obslytics/pkg/dataframe"
+	"github.com/thanos-community/obslytics/pkg/output"
 )
 
-// ExampleWriter formats the dataframe into format usable for testing in
-// examples. Uses tabwriter to produce the table in readable format and shortens
+// DebugWriter formats the dataframe into format usable for debugging and testing purposes (e.g. in
+// examples). Uses tabwriter to produce the table in readable format and shortens
 // fields when possible (such as using only time part of a timestamp) so it fits
 // nicer into the output.
+//
+// If nextW present, it forwards the data there as well.
 // Implements output.Writer.
-type ExampleWriter struct {
+type DebugWriter struct {
 	w       *tabwriter.Writer
+	nextW   output.Writer
 	started bool
 }
 
-func NewExampleWriter(w io.Writer) *ExampleWriter {
+func NewDebugWriter(w io.Writer, nextW output.Writer) *DebugWriter {
 	tabw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	return &ExampleWriter{w: tabw}
+	return &DebugWriter{w: tabw, nextW: nextW}
 }
 
-func (w *ExampleWriter) Write(df dataframe.Dataframe) error {
+func (w *DebugWriter) Write(df dataframe.Dataframe) error {
 	if !w.started {
 		w.PrintHeader(df)
 		w.started = true
@@ -33,10 +37,16 @@ func (w *ExampleWriter) Write(df dataframe.Dataframe) error {
 	for i.Next() {
 		w.PrintRow(df.Schema(), i.At())
 	}
+	if w.nextW != nil {
+		err := w.nextW.Write(df)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (w *ExampleWriter) PrintHeader(df dataframe.Dataframe) {
+func (w *DebugWriter) PrintHeader(df dataframe.Dataframe) {
 	// Adding | <-   -> | around the lines to avoid dealing with training spaces
 	// in example output checking
 	fmt.Fprint(w.w, "| ")
@@ -46,7 +56,7 @@ func (w *ExampleWriter) PrintHeader(df dataframe.Dataframe) {
 	fmt.Fprint(w.w, "|\n")
 }
 
-func (w *ExampleWriter) PrintRow(s dataframe.Schema, r dataframe.Row) {
+func (w *DebugWriter) PrintRow(s dataframe.Schema, r dataframe.Row) {
 	fmt.Fprint(w.w, "| ")
 	for i, cell := range r {
 		c := s[i]
@@ -69,7 +79,7 @@ func (w *ExampleWriter) PrintRow(s dataframe.Schema, r dataframe.Row) {
 	fmt.Fprint(w.w, "|\n")
 }
 
-func (w *ExampleWriter) Close() error {
+func (w *DebugWriter) Close() error {
 	err := w.w.Flush()
 	if err != nil {
 		return err

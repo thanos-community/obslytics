@@ -30,11 +30,7 @@ func (o ParquetOutput) Open(_ context.Context, params output.OutputParams) (outp
 	return NewParquetWriter(w), nil
 }
 
-// ExampleWriter formats the dataframe into format usable for testing in
-// examples. Uses tabwriter to produce the table in readable format and shortens
-// fields when possible (such as using only time part of a timestamp) so it fits
-// nicer into the output.
-// Implements output.Writer.
+// parquetWriter Implements output.Writer.
 type parquetWriter struct {
 	w     io.WriteCloser
 	parqf source.ParquetFile
@@ -87,11 +83,14 @@ func (w *parquetWriter) Write(df dataframe.Dataframe) error {
 }
 
 func (w *parquetWriter) Close() error {
-	err := w.parqw.WriteStop()
-	if err != nil {
-		return errors.Wrap(err, "Error closing parquet writer")
+	fmt.Printf("Closing parqw\n")
+	if w.parqw != nil {
+		err := w.parqw.WriteStop()
+		if err != nil {
+			return errors.Wrap(err, "Error closing parquet writer")
+		}
 	}
-	err = w.w.Close()
+	err := w.w.Close()
 	if err != nil {
 		return errors.Wrap(err, "Error closing output file")
 	}

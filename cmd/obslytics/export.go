@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/run"
 	"github.com/thanos-community/obslytics/pkg/input"
 	"github.com/thanos-community/obslytics/pkg/output"
+
+	"github.com/thanos-community/obslytics/pkg/output/debug"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/alecthomas/kingpin.v2"
 
@@ -25,12 +28,18 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 	serParams := input.SeriesParams{}
 	cmd.Flag("metric", "Name of the metric to export").Required().StringVar(&serParams.Metric)
 	timeFmt := time.RFC3339
+
 	minTimeStr := cmd.Flag("min-time", fmt.Sprintf("The lower boundary of the time series in %s format", timeFmt)).
 		Required().String()
+
 	maxTimeStr := cmd.Flag("max-time", fmt.Sprintf("The upper boundary of the time series in %s format", timeFmt)).
 		Required().String()
+
 	resolution := cmd.Flag("resolution", "Sample resolution (e.g. 30m)").
 		Required().Duration()
+
+	dbgout := false
+	cmd.Flag("debug", "Show additional debug info (such as produced table)").BoolVar(&dbgout)
 
 	outParams := output.OutputParams{}
 	cmd.Flag("out", "Output file").Required().StringVar(&outParams.OutFile)
@@ -85,6 +94,11 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				return err
 			}
 			defer w.Close()
+
+			if dbgout {
+				w = debug.NewDebugWriter(os.Stdout, w)
+				defer w.Close()
+			}
 
 			err = ingest.ProcessAll(ser, a, w)
 			if err != nil {

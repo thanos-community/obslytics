@@ -11,7 +11,7 @@ import (
 
 	"github.com/thanos-community/obslytics/pkg/input"
 	"github.com/thanos-community/obslytics/pkg/input/storeapi"
-	"github.com/thanos-community/obslytics/pkg/output/example"
+	"github.com/thanos-community/obslytics/pkg/output/debug"
 )
 
 func ExampleAggregator() {
@@ -32,7 +32,7 @@ func ExampleAggregator() {
 	a.Finalize()
 	df, _ := a.Flush()
 
-	w := example.NewExampleWriter(os.Stdout)
+	w := debug.NewDebugWriter(os.Stdout, nil)
 	defer w.Close()
 
 	w.Write(df)
@@ -50,7 +50,7 @@ func ExampleAggregator() {
 
 func ExampleProcess() {
 	a := NewAggregator(30*time.Minute, func(o *AggrsOptions) { o.Max.Enabled = true })
-	w := example.NewExampleWriter(os.Stdout)
+	w := debug.NewDebugWriter(os.Stdout, nil)
 	defer w.Close()
 
 	for _, s := range sampleSeries() {
@@ -79,7 +79,7 @@ func ExampleProcess() {
 
 func ExampleProcessAll() {
 	a := NewAggregator(30*time.Minute, func(o *AggrsOptions) { o.Max.Enabled = true })
-	w := example.NewExampleWriter(os.Stdout)
+	w := debug.NewDebugWriter(os.Stdout, nil)
 	defer w.Close()
 
 	i := NewSeriesIterator(sampleSeries())
