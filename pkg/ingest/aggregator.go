@@ -37,26 +37,27 @@ type AggrsOptions struct {
 }
 
 // By default, all aggregations are disabled and target columns set with `_` prefix.
-var defaultAggrsOptions = AggrsOptions{
-	initSampleTimeFunc: func(res time.Duration, t time.Time) time.Time {
-		return t.Truncate(res)
-	},
+func defaultAggrsOptions() AggrsOptions {
+	return AggrsOptions{
+		initSampleTimeFunc: func(res time.Duration, t time.Time) time.Time {
+			return t.Truncate(res)
+		},
 
-	Sum:   AggrOption{Column: "_sum"},
-	Count: AggrOption{Column: "_count"},
-	Min:   AggrOption{Column: "_min"},
-	Max:   AggrOption{Column: "_max"},
+		Sum:   AggrOption{Column: "_sum"},
+		Count: AggrOption{Column: "_count"},
+		Min:   AggrOption{Column: "_min"},
+		Max:   AggrOption{Column: "_max"},
+	}
 }
 
 type AggrOptionFunc func(*AggrsOptions)
 
 func evalOptions(optFuncs []AggrOptionFunc) *AggrsOptions {
-	opt := &AggrsOptions{}
-	*opt = defaultAggrsOptions
+	opt := defaultAggrsOptions()
 	for _, o := range optFuncs {
-		o(opt)
+		o(&opt)
 	}
-	return opt
+	return &opt
 }
 
 type aggregatedSeries struct {
@@ -73,22 +74,22 @@ type aggregatedSeries struct {
 }
 
 type aggregator struct {
-	Resolution   time.Duration
-	aggrsOptions AggrsOptions
+	resolution   time.Duration
+	options      AggrsOptions
 	activeSeries map[uint64]*aggregatedSeries
 	df           AggrDf
 }
 
-// aggregator ingests the data and produces aggregations at the specified resolution.
+// Aggregator ingests the data and produces aggregations at the specified resolution.
 type Aggregator struct{ aggregator }
 
 func NewAggregator(resolution time.Duration, optFuncs ...AggrOptionFunc) *aggregator {
-	aggrsOptions := *evalOptions(optFuncs)
+	options := *evalOptions(optFuncs)
 	return &aggregator{
-		Resolution:   resolution,
-		aggrsOptions: aggrsOptions,
+		resolution:   resolution,
+		options:      options,
 		activeSeries: make(map[uint64]*aggregatedSeries),
-		df:           newAggrDf(aggrsOptions),
+		df:           newAggrDf(options),
 	}
 }
 
@@ -96,10 +97,10 @@ func newAggrDf(ao AggrsOptions) AggrDf {
 	return AggrDf{seriesRecordSets: make(map[uint64]*SeriesRecordSet)}
 }
 
-// Ingest a single chunk provided via an iterator. For a specific searies, We
-// assume the iterator returns values ordered by the timestamp
-// The iterator is expected to already be at the point of the first sample after as.sampleStart
-func (a *aggregator) ingestChunk(as *aggregatedSeries, i input.ChunkIterator) (*aggregatedSeries, error) {
+// ingestChunk ingests a single chunk provided via an iterator. For a specific searies, We
+// assume the iterator returns values ordered by the timestamp.
+// The iterator is expected to already be at the point of the first sample after as.sampleStart.
+func (a *aggregator) ingestChunk(as *aggregatedSeries, i input.ChunkIterator) error {
 	var (
 		ts int64
 		v  float64
@@ -109,7 +110,7 @@ func (a *aggregator) ingestChunk(as *aggregatedSeries, i input.ChunkIterator) (*
 		ts, v = i.At()
 		t = timestamp.Time(ts)
 		if t.Before(as.sampleStart) {
-			return as, errors.Errorf("Chunk timestamp %s is less than the sampleStart %s", t, as.sampleStart)
+			return errors.Errorf("Chunk timestamp %s is less than the sampleStart %s", t, as.sampleStart)
 		}
 		if t.After(as.sampleEnd) {
 			as = a.finalizeSample(as, t)
@@ -122,7 +123,7 @@ func (a *aggregator) ingestChunk(as *aggregatedSeries, i input.ChunkIterator) (*
 			as.max = v
 		}
 		if as.maxTime.After(t) {
-			return as, errors.Errorf("Incoming chunks are not sorted by timestamp: expected %s after %s", t, as.maxTime)
+			return errors.Errorf("Incoming chunks are not sorted by timestamp: expected %s after %s", t, as.maxTime)
 		}
 		as.maxTime = t
 		as.count += 1
@@ -137,7 +138,7 @@ func (a *aggregator) ingestChunk(as *aggregatedSeries, i input.ChunkIterator) (*
 			break
 		}
 	}
-	return as, nil
+	return nil
 }
 
 func (a *aggregator) addSeriesToDf(as *aggregatedSeries) {
@@ -160,23 +161,23 @@ func (a *aggregator) addSeriesToDf(as *aggregatedSeries) {
 		vals[l.Name] = l.Value
 	}
 
-	if a.aggrsOptions.Count.Enabled {
-		vals[a.aggrsOptions.Count.Column] = as.count
+	if a.options.Count.Enabled {
+		vals[a.options.Count.Column] = as.count
 	}
-	if a.aggrsOptions.Sum.Enabled {
-		vals[a.aggrsOptions.Sum.Column] = as.sum
+	if a.options.Sum.Enabled {
+		vals[a.options.Sum.Column] = as.sum
 	}
-	if a.aggrsOptions.Min.Enabled {
-		vals[a.aggrsOptions.Min.Column] = as.min
+	if a.options.Min.Enabled {
+		vals[a.options.Min.Column] = as.min
 	}
-	if a.aggrsOptions.Max.Enabled {
-		vals[a.aggrsOptions.Max.Column] = as.max
+	if a.options.Max.Enabled {
+		vals[a.options.Max.Column] = as.max
 	}
 	rs.Records = append(rs.Records, Record{Values: vals})
 }
 
-// Add the active aggregated series into the final dataframe when we've reached the
-// sample end time. Returns pointer to a new instance of the aggregatedSeries
+// finalizeSample adds the active aggregated series into the final dataframe when we've reached the
+// sample end time. Returns pointer to a new instance of the aggregatedSeries.
 func (a *aggregator) finalizeSample(as *aggregatedSeries, nextT time.Time) *aggregatedSeries {
 	if as.count > 0 {
 		a.addSeriesToDf(as)
@@ -184,15 +185,15 @@ func (a *aggregator) finalizeSample(as *aggregatedSeries, nextT time.Time) *aggr
 
 	// calculate the next sample cycle to contain the nextT time. First calculate how many
 	// whole resolution cycles are between current sampleStart and nextT and then add
-	// those cycles to the current sampleStart
-	nextSampleCycle := ((nextT.Unix() - as.sampleStart.Unix()) / (int64)(a.Resolution/time.Second))
-	nextSampleStart := as.sampleStart.Add((time.Duration(nextSampleCycle)) * a.Resolution)
+	// those cycles to the current sampleStart.
+	nextSampleCycle := ((nextT.Unix() - as.sampleStart.Unix()) / (int64)(a.resolution/time.Second))
+	nextSampleStart := as.sampleStart.Add((time.Duration(nextSampleCycle)) * a.resolution)
 
 	as = &aggregatedSeries{
 		labels:      as.labels,
 		hash:        as.hash,
 		sampleStart: nextSampleStart,
-		sampleEnd:   nextSampleStart.Add(a.Resolution),
+		sampleEnd:   nextSampleStart.Add(a.resolution),
 	}
 	a.activeSeries[as.hash] = as
 	return as
@@ -201,7 +202,7 @@ func (a *aggregator) finalizeSample(as *aggregatedSeries, nextT time.Time) *aggr
 // Ingest the data to an aggregated set.
 func (a *aggregator) Ingest(s input.Series) error {
 	if s.MinTime().IsZero() {
-		// Zere means no chunks in the series
+		// Zero means no chunks in the series.
 		return nil
 	}
 	ls := s.Labels()
@@ -210,8 +211,8 @@ func (a *aggregator) Ingest(s input.Series) error {
 	as, ok := a.activeSeries[seriesHash]
 	if !ok {
 		minTime := s.MinTime()
-		sampleStart := a.aggrsOptions.initSampleTimeFunc(a.Resolution, minTime)
-		sampleEnd := sampleStart.Add(a.Resolution)
+		sampleStart := a.options.initSampleTimeFunc(a.resolution, minTime)
+		sampleEnd := sampleStart.Add(a.resolution)
 		as = &aggregatedSeries{labels: ls, hash: seriesHash, sampleStart: sampleStart, sampleEnd: sampleEnd}
 		a.activeSeries[seriesHash] = as
 	}
@@ -222,11 +223,11 @@ func (a *aggregator) Ingest(s input.Series) error {
 	}
 
 	if !i.Seek(timestamp.FromTime(as.sampleStart)) {
-		// no chunks after the sampleStart to process
+		// No chunks after the sampleStart to process.
 		return nil
 	}
 
-	as, err = a.ingestChunk(as, i)
+	err = a.ingestChunk(as, i)
 	if err != nil {
 		return errors.Wrap(err, "Error while ingesting a chunk")
 	}
@@ -253,7 +254,7 @@ func (a *aggregator) Flush() (dataframe.Dataframe, bool) {
 	// so that we can use the ingested data to determine the labels to be exported.
 	df.schema = a.getSchema()
 
-	a.df = newAggrDf(a.aggrsOptions)
+	a.df = newAggrDf(a.options)
 	return df, true
 }
 
@@ -270,7 +271,7 @@ func (a *aggregator) getLabelNames() []string {
 		break
 	}
 
-	// we've not found labels in df, look at the active series instead
+	// We've not found labels in df, look at the active series instead.
 	if len(ls) == 0 {
 		for _, s := range a.activeSeries {
 			ls = s.labels
@@ -288,7 +289,7 @@ func (a *aggregator) getLabelNames() []string {
 }
 
 func (a *aggregator) getSchema() dataframe.Schema {
-	ao := a.aggrsOptions
+	ao := a.options
 	schema := dataframe.Schema{}
 
 	for _, l := range a.getLabelNames() {

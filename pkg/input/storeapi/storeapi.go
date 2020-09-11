@@ -1,6 +1,6 @@
 package storeapi
 
-// Implements input interfaces on top of Thanos Store API endpoints
+// Implements input interfaces on top of Thanos Store API endpoints.
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -30,6 +31,19 @@ func NewStoreAPIInput(logger log.Logger, conf input.InputConfig) (storeAPIInput,
 	return storeAPIInput{logger: logger, conf: conf}, nil
 }
 
+func parseStoreMatchers(matcherStr string) (storeMatchers []storepb.LabelMatcher, err error) {
+	matchers, err := parser.ParseMetricSelector(matcherStr)
+	if err != nil {
+		return nil, err
+	}
+	stm, err := storepb.TranslatePromMatchers(matchers...)
+	if err != nil {
+		return nil, err
+	}
+
+	return stm, nil
+}
+
 func (i storeAPIInput) Open(ctx context.Context, params input.SeriesParams) (input.SeriesIterator, error) {
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(i.logger, nil, tracing.NoopTracer(),
 		!i.conf.TLSConfig.InsecureSkipVerify,
@@ -47,13 +61,16 @@ func (i storeAPIInput) Open(ctx context.Context, params input.SeriesParams) (inp
 		return nil, errors.Wrap(err, "Error initializing GRPC dial context")
 	}
 
+	matchers, err := parseStoreMatchers(params.Matcher)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error parsing provided matchers")
+	}
+
 	client := storepb.NewStoreClient(conn)
 	seriesClient, err := client.Series(ctx, &storepb.SeriesRequest{
-		MinTime: timestamp.FromTime(params.MinTime),
-		MaxTime: timestamp.FromTime(params.MaxTime),
-		Matchers: []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: params.Metric},
-		},
+		MinTime:                 params.MinTime.PrometheusTimestamp(),
+		MaxTime:                 params.MaxTime.PrometheusTimestamp(),
+		Matchers:                matchers,
 		PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 	})
 	return &storeSeriesIterator{
@@ -63,7 +80,7 @@ func (i storeAPIInput) Open(ctx context.Context, params input.SeriesParams) (inp
 		client: seriesClient}, nil
 }
 
-// storeSeriesIterator implements input.SeriesIterator
+// storeSeriesIterator implements input.SeriesIterator.
 type storeSeriesIterator struct {
 	logger        log.Logger
 	ctx           context.Context
@@ -104,7 +121,7 @@ func (i *storeSeriesIterator) Close() error {
 	return nil
 }
 
-// StoreSeries implements input.Series
+// StoreSeries implements input.Series.
 type StoreSeries struct{ StoreS *storepb.Series }
 
 func (s StoreSeries) Labels() labels.Labels {

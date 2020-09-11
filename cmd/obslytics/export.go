@@ -22,41 +22,30 @@ import (
 
 func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command("export", "Export Observability Data into popular analytics formats.")
-	inputFlag := extflag.RegisterPathOrContent(cmd, "input-cfg", "YAML for input configuration.", true)
-	// TODO(inecas): add support for output configuration
-	outputFlag := extflag.RegisterPathOrContent(cmd, "ouput-cfg", "YAML for output configuration.", false)
+	inputFlag := extflag.RegisterPathOrContent(cmd, "input-config", "YAML for input configuration.", true)
+	// TODO(inecas): add support for output configuration.
+	outputFlag := extflag.RegisterPathOrContent(cmd, "output-config", "YAML for output configuration.", false)
 
-	serParams := input.SeriesParams{}
-	cmd.Flag("metric", "Name of the metric to export").Required().StringVar(&serParams.Metric)
+	seriesParams := input.SeriesParams{}
+	cmd.Flag("match", "Name of the metric to export").Required().StringVar(&seriesParams.Matcher)
 	timeFmt := time.RFC3339
 
-	minTimeStr := cmd.Flag("min-time", fmt.Sprintf("The lower boundary of the time series in %s format", timeFmt)).
-		Required().String()
+	cmd.Flag("min-time", fmt.Sprintf("The lower boundary of the time series in %s or duration format", timeFmt)).
+		Required().SetValue(&seriesParams.MinTime)
 
-	maxTimeStr := cmd.Flag("max-time", fmt.Sprintf("The upper boundary of the time series in %s format", timeFmt)).
-		Required().String()
+	cmd.Flag("max-time", fmt.Sprintf("The upper boundary of the time series in %s or duration format", timeFmt)).
+		Required().SetValue(&seriesParams.MaxTime)
 
-	resolution := cmd.Flag("resolution", "Sample resolution (e.g. 30m)").
-		Required().Duration()
+	var resolution time.Duration
+	cmd.Flag("resolution", "Sample resolution (e.g. 30m)").Required().DurationVar(&resolution)
 
-	dbgout := false
-	cmd.Flag("debug", "Show additional debug info (such as produced table)").BoolVar(&dbgout)
+	dbgOut := false
+	cmd.Flag("debug", "Show additional debug info (such as produced table)").BoolVar(&dbgOut)
 
 	outParams := output.OutputParams{}
 	cmd.Flag("out", "Output file").Required().StringVar(&outParams.OutFile)
 
 	m["export"] = func(g *run.Group, logger log.Logger) error {
-		minTime, err := time.Parse(timeFmt, *minTimeStr)
-		if err != nil {
-			return err
-		}
-		serParams.MinTime = minTime
-		maxTime, err := time.Parse(timeFmt, *maxTimeStr)
-		if err != nil {
-			return err
-		}
-		serParams.MaxTime = maxTime
-
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			inputCfg, err := inputFlag.Content()
@@ -68,13 +57,13 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				return err
 			}
 
-			ser, err := in.Open(ctx, serParams)
+			ser, err := in.Open(ctx, seriesParams)
 			if err != nil {
 				return err
 			}
 
-			a := ingest.NewAggregator(*resolution, func(o *ingest.AggrsOptions) {
-				// TODO(inecas): expose the enabled aggregations via flag
+			a := ingest.NewAggregator(resolution, func(o *ingest.AggrsOptions) {
+				// TODO(inecas): Expose the enabled aggregations via flag.
 				o.Count.Enabled = true
 				o.Sum.Enabled = true
 				o.Min.Enabled = true
@@ -96,16 +85,12 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 			}
 			defer w.Close()
 
-			if dbgout {
+			if dbgOut {
 				w = debug.NewDebugWriter(os.Stdout, w)
 				defer w.Close()
 			}
 
-			err = ingest.ProcessAll(ser, a, w)
-			if err != nil {
-				return err
-			}
-			return nil
+			return ingest.ProcessAll(ser, a, w)
 		}, func(error) { cancel() })
 		return nil
 	}

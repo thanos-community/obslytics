@@ -14,7 +14,7 @@ func Parse(logger log.Logger, confYaml []byte) (input.Input, error) {
 		return nil, err
 	}
 
-	// TODO(inecas): determine the implementation from config options
+	// TODO(inecas): determine the implementation from config options.
 	in, err := storeapi.NewStoreAPIInput(logger, cfg)
 	return in, err
 }

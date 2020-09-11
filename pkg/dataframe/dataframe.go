@@ -14,16 +14,16 @@ type Column struct {
 	Type Type
 }
 
-// Schema defines columns to be exposed by the dataframe
+// Schema defines columns to be exposed by the dataframe.
 type Schema []Column
 
-// RowsIterator exposes the rows of the dataframe
+// RowsIterator exposes the rows of the dataframe.
 type RowsIterator interface {
 	Next() bool
 	At() Row
 }
 
-// Row stores a single line of a table - the order of columns is defined by the Schema
+// Row stores a single line of a table - the order of columns is defined by the Schema.
 type Row []interface{}
 
 // Dataframe exposes ingested data to be used to turn into tabular format.

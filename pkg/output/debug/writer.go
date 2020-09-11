@@ -48,7 +48,7 @@ func (w *DebugWriter) Write(df dataframe.Dataframe) error {
 
 func (w *DebugWriter) PrintHeader(df dataframe.Dataframe) {
 	// Adding | <-   -> | around the lines to avoid dealing with training spaces
-	// in example output checking
+	// in example output checking.
 	fmt.Fprint(w.w, "| ")
 	for _, c := range df.Schema() {
 		fmt.Fprintf(w.w, "%s\t", c.Name)

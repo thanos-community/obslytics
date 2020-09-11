@@ -7,6 +7,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	http_util "github.com/thanos-io/thanos/pkg/http"
+	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 )
 
 // InputConfig contains the options determining the endpoint to talk to.
@@ -15,11 +16,11 @@ type InputConfig struct {
 	TLSConfig http_util.TLSConfig `yaml:"tls_config"`
 }
 
-// SeriesParams determines what data should be loaded from the input
+// SeriesParams determines what data should be loaded from the input.
 type SeriesParams struct {
-	Metric  string
-	MinTime time.Time
-	MaxTime time.Time
+	Matcher string
+	MinTime thanosmodel.TimeOrDurationValue
+	MaxTime thanosmodel.TimeOrDurationValue
 }
 
 type Input interface {
