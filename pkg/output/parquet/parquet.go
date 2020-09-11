@@ -25,7 +25,7 @@ type ParquetOutput struct{}
 func (o ParquetOutput) Open(_ context.Context, params output.OutputParams) (output.Writer, error) {
 	w, err := os.Create(params.OutFile)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error opening file")
+		return nil, errors.Wrap(err, "error opening file")
 	}
 	return NewParquetWriter(w), nil
 }
@@ -86,12 +86,12 @@ func (w *parquetWriter) Close() error {
 	if w.parqw != nil {
 		err := w.parqw.WriteStop()
 		if err != nil {
-			return errors.Wrap(err, "Error closing parquet writer")
+			return errors.Wrap(err, "error closing parquet writer")
 		}
 	}
 	err := w.w.Close()
 	if err != nil {
-		return errors.Wrap(err, "Error closing output file")
+		return errors.Wrap(err, "error closing output file")
 	}
 	return nil
 }

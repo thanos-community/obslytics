@@ -18,7 +18,7 @@ import (
 type AggrOption struct {
 	// Should the aggregation be used?
 	Enabled bool
-	// Column to store the aggregation at
+	// Column to store the aggregation at.
 	Column string
 }
 
@@ -219,7 +219,7 @@ func (a *aggregator) Ingest(s input.Series) error {
 
 	i, err := s.ChunkIterator()
 	if err != nil {
-		return errors.Wrap(err, "Error while decoding a chunk")
+		return errors.Wrap(err, "error while decoding a chunk")
 	}
 
 	if !i.Seek(timestamp.FromTime(as.sampleStart)) {
@@ -229,7 +229,7 @@ func (a *aggregator) Ingest(s input.Series) error {
 
 	err = a.ingestChunk(as, i)
 	if err != nil {
-		return errors.Wrap(err, "Error while ingesting a chunk")
+		return errors.Wrap(err, "error while ingesting a chunk")
 	}
 	return nil
 }
@@ -241,7 +241,7 @@ func (a *aggregator) Finalize() error {
 	return nil
 }
 
-// Return already aggregated data from previous samples while cleaning
+// Flush returns already aggregated data from previous samples while cleaning
 // the buffer.
 func (a *aggregator) Flush() (dataframe.Dataframe, bool) {
 	if len(a.df.seriesRecordSets) == 0 {
@@ -258,10 +258,13 @@ func (a *aggregator) Flush() (dataframe.Dataframe, bool) {
 	return df, true
 }
 
-// Assumes all series having the same labels and just takes the first
+// getLabelNames assumes all series having the same labels and just takes the first
 // series to get the label names.
 // The returned strings are always sorted alphabetically.
 func (a *aggregator) getLabelNames() []string {
+	// TODO(inecas): The labels can be changing over time: to workaround
+	// this problem, it could have to add an option to explicitly provide the list
+	// of labels we want to export and fill in NULLs in case the label would be missing.
 	var (
 		ls  labels.Labels
 		ret []string

@@ -53,17 +53,17 @@ func (i storeAPIInput) Open(ctx context.Context, params input.SeriesParams) (inp
 		i.conf.Endpoint)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "Error initializing GRPC options")
+		return nil, errors.Wrap(err, "error initializing GRPC options")
 	}
 
 	conn, err := grpc.DialContext(ctx, i.conf.Endpoint, dialOpts...)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error initializing GRPC dial context")
+		return nil, errors.Wrap(err, "error initializing GRPC dial context")
 	}
 
 	matchers, err := parseStoreMatchers(params.Matcher)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error parsing provided matchers")
+		return nil, errors.Wrap(err, "error parsing provided matchers")
 	}
 
 	client := storepb.NewStoreClient(conn)

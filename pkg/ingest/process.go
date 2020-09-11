@@ -11,9 +11,8 @@ import (
 
 // Process a single series via an ingestor and write results to writer if available.
 func Process(s input.Series, in Ingestor, w output.Writer) error {
-	err := in.Ingest(s)
-	if err != nil {
-		return errors.Wrap(err, "Error while ingesting the series")
+	if err := in.Ingest(s); err != nil {
+		return errors.Wrap(err, "error while ingesting the series")
 	}
 
 	df, ok := in.Flush()
@@ -21,18 +20,16 @@ func Process(s input.Series, in Ingestor, w output.Writer) error {
 		return nil
 	}
 
-	err = w.Write(df)
-	if err != nil {
-		return errors.Wrap(err, "Error while writing the series")
+	if err := w.Write(df); err != nil {
+		return errors.Wrap(err, "error while writing the series")
 	}
 
 	return nil
 }
 
 func ProcessFinalize(in Ingestor, w output.Writer) error {
-	err := in.Finalize()
-	if err != nil {
-		return errors.Wrap(err, "Error while finalizing the ingestor")
+	if err := in.Finalize(); err != nil {
+		return errors.Wrap(err, "error while finalizing the ingestor")
 	}
 
 	df, ok := in.Flush()
@@ -40,9 +37,8 @@ func ProcessFinalize(in Ingestor, w output.Writer) error {
 		return nil
 	}
 
-	err = w.Write(df)
-	if err != nil {
-		return errors.Wrap(err, "Error while writing on finish")
+	if err := w.Write(df); err != nil {
+		return errors.Wrap(err, "error while writing on finish")
 	}
 
 	return nil
@@ -52,14 +48,12 @@ func ProcessFinalize(in Ingestor, w output.Writer) error {
 func ProcessAll(si input.SeriesIterator, in Ingestor, w output.Writer) error {
 	for si.Next() {
 		s := si.At()
-		err := Process(s, in, w)
-		if err != nil {
+		if err := Process(s, in, w); err != nil {
 			return err
 		}
 	}
 
-	err := ProcessFinalize(in, w)
-	if err != nil {
+	if err := ProcessFinalize(in, w); err != nil {
 		return err
 	}
 
