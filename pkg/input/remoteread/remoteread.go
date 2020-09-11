@@ -159,11 +159,11 @@ func (r ReadSeries) MinTime() time.Time {
 }
 
 func (r ReadSeries) ChunkIterator() (input.ChunkIterator, error) {
-	//panic("implement me")
 	chunk := ReadChunk{
 		series: r.timeseries,
 	}
-	return chunk.Iterator(), nil
+	iterator := chunk.Iterator()
+	return iterator, nil
 }
 
 // ReadChunkIterator implements input.ChunkIterator
@@ -174,7 +174,7 @@ type ReadChunkIterator struct {
 	maxSampleIndex     int
 }
 
-func (c ReadChunkIterator) Next() bool {
+func (c *ReadChunkIterator) Next() bool {
 	// return false if the last index is reached
 	if c.currentSampleIndex+1 > c.maxSampleIndex {
 		return false
@@ -188,7 +188,7 @@ func (c ReadChunkIterator) Next() bool {
 // If current sample found by previous `Next` or `Seek` operation already has this property, Seek has no effect.
 // Seek returns true, if such sample exists, false otherwise.
 // Iterator is exhausted when the Seek returns false.
-func (c ReadChunkIterator) Seek(t int64) bool {
+func (c *ReadChunkIterator) Seek(t int64) bool {
 	for c.Chunk.series.Samples[c.currentSampleIndex].Timestamp < t {
 		if !c.Next() {
 			return false
@@ -199,13 +199,13 @@ func (c ReadChunkIterator) Seek(t int64) bool {
 
 // At returns the current timestamp/value pair.
 // Before the iterator has advanced At behaviour is unspecified.
-func (c ReadChunkIterator) At() (int64, float64) {
+func (c *ReadChunkIterator) At() (int64, float64) {
 	return c.Chunk.series.Samples[c.currentSampleIndex].Timestamp, c.Chunk.series.Samples[c.currentSampleIndex].Value
 }
 
 // Err returns the current error. It should be used only after iterator is
 // exhausted, that is `Next` or `Seek` returns false.
-func (c ReadChunkIterator) Err() error {
+func (c *ReadChunkIterator) Err() error {
 	return nil
 }
 
@@ -214,6 +214,6 @@ type ReadChunk struct {
 	series prompb.TimeSeries
 }
 
-func (c ReadChunk) Iterator() ReadChunkIterator {
-	return ReadChunkIterator{Chunk: c, currentSampleIndex: 0, maxSampleIndex: len(c.series.Samples) - 1}
+func (c ReadChunk) Iterator() input.ChunkIterator {
+	return &ReadChunkIterator{Chunk: c, currentSampleIndex: 0, maxSampleIndex: len(c.series.Samples) - 1}
 }
