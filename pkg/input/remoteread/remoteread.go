@@ -1,6 +1,5 @@
 package remoteread
 
-// TBD, help wanted!
 import (
 	"context"
 	"github.com/go-kit/kit/log"
@@ -36,10 +35,6 @@ func (i remoteReadInput) Open(ctx context.Context, params input.SeriesParams) (i
 	}
 
 	httpConfig := config_util.HTTPClientConfig{
-		//BasicAuth:       nil,
-		//BearerToken:     "",
-		//BearerTokenFile: "",
-		//ProxyURL:        config_util.URL{},
 		TLSConfig: tlsConfig,
 	}
 
