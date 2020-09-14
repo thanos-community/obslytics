@@ -6,16 +6,22 @@ GO     ?= $(shell which go)
 
 # Bellow generated variables ensure that every time a tool under each variable is invoked, the correct version
 # will be used; reinstalling only if needed.
-# For example for embedmd variable:
+# For example for bingo variable:
 #
 # In your main Makefile (for non array binaries):
 #
 #include .bingo/Variables.mk # Assuming -dir was set to .bingo .
 #
-#command: $(EMBEDMD)
-#	@echo "Running embedmd"
-#	@$(EMBEDMD) <flags/args..>
+#command: $(BINGO)
+#	@echo "Running bingo"
+#	@$(BINGO) <flags/args..>
 #
+BINGO := $(GOBIN)/bingo-v0.2.3
+$(BINGO): .bingo/bingo.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/bingo-v0.2.3"
+	@cd .bingo && $(GO) build -modfile=bingo.mod -o=$(GOBIN)/bingo-v0.2.3 "github.com/bwplotka/bingo"
+
 EMBEDMD := $(GOBIN)/embedmd-v1.0.0
 $(EMBEDMD): .bingo/embedmd.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
@@ -34,11 +40,11 @@ $(GOIMPORTS): .bingo/goimports.mod
 	@echo "(re)installing $(GOBIN)/goimports-v0.0.0-20200519204825-e64124511800"
 	@cd .bingo && $(GO) build -modfile=goimports.mod -o=$(GOBIN)/goimports-v0.0.0-20200519204825-e64124511800 "golang.org/x/tools/cmd/goimports"
 
-GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.26.0
+GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.31.0
 $(GOLANGCI_LINT): .bingo/golangci-lint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/golangci-lint-v1.26.0"
-	@cd .bingo && $(GO) build -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.26.0 "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	@echo "(re)installing $(GOBIN)/golangci-lint-v1.31.0"
+	@cd .bingo && $(GO) build -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.31.0 "github.com/golangci/golangci-lint/cmd/golangci-lint"
 
 MISSPELL := $(GOBIN)/misspell-v0.3.4
 $(MISSPELL): .bingo/misspell.mod

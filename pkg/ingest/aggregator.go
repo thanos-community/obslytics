@@ -84,6 +84,7 @@ type aggregator struct {
 type Aggregator struct{ aggregator }
 
 func NewAggregator(resolution time.Duration, optFuncs ...AggrOptionFunc) *aggregator {
+	// TODO(bwplotka): What if resolution is 0?
 	options := *evalOptions(optFuncs)
 	return &aggregator{
 		resolution:   resolution,
@@ -93,7 +94,7 @@ func NewAggregator(resolution time.Duration, optFuncs ...AggrOptionFunc) *aggreg
 	}
 }
 
-func newAggrDf(ao AggrsOptions) AggrDf {
+func newAggrDf(AggrsOptions) AggrDf {
 	return AggrDf{seriesRecordSets: make(map[uint64]*SeriesRecordSet)}
 }
 

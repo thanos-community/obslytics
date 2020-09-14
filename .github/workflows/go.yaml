@@ -35,12 +35,16 @@ jobs:
       fail-fast: false
       matrix:
         go: [ '1.14.x']
-        platform: [ubuntu-latest, macos-latest]
+        ## TODO(bwplotka): Add macos-latest once we can figure out how to add docker reliably there.
+        platform: [ubuntu-latest]
 
     name: Unit tests on Go ${{ matrix.go }} ${{ matrix.platform }}
     steps:
       - name: Checkout code into the Go module directory.
         uses: actions/checkout@v2
+
+      - name: Install Docker
+        uses: docker-practice/actions-setup-docker@0.0.1
 
       - name: Install Go
         uses: actions/setup-go@v2

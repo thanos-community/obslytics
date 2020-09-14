@@ -25,8 +25,8 @@ Commands:
   help [<command>...]
     Show help.
 
-  export [<flags>]
-    Export Observability Data into popular analytics formats.
+  export --match=MATCH --min-time=MIN-TIME --max-time=MAX-TIME --resolution=RESOLUTION --out=OUT [<flags>]
+    Export observability data into popular analytics formats.
 
 
 ```
