@@ -10,25 +10,24 @@ import (
 	"github.com/thanos-community/obslytics/pkg/output"
 )
 
-// DebugWriter formats the dataframe into format usable for debugging and testing purposes (e.g. in
+// Writer formats the dataframe into format usable for debugging and testing purposes (e.g. in
 // examples). Uses tabwriter to produce the table in readable format and shortens
 // fields when possible (such as using only time part of a timestamp) so it fits
 // nicer into the output.
 //
 // If nextW present, it forwards the data there as well.
 // Implements output.Writer.
-type DebugWriter struct {
+type Writer struct {
 	w       *tabwriter.Writer
 	nextW   output.Writer
 	started bool
 }
 
-func NewDebugWriter(w io.Writer, nextW output.Writer) *DebugWriter {
-	tabw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	return &DebugWriter{w: tabw, nextW: nextW}
+func NewWriter(w io.Writer, nextW output.Writer) *Writer {
+	return &Writer{w: tabwriter.NewWriter(w, 0, 0, 2, ' ', 0), nextW: nextW}
 }
 
-func (w *DebugWriter) Write(df dataframe.Dataframe) error {
+func (w *Writer) Write(df dataframe.Dataframe) error {
 	if !w.started {
 		w.PrintHeader(df)
 		w.started = true
@@ -46,7 +45,7 @@ func (w *DebugWriter) Write(df dataframe.Dataframe) error {
 	return nil
 }
 
-func (w *DebugWriter) PrintHeader(df dataframe.Dataframe) {
+func (w *Writer) PrintHeader(df dataframe.Dataframe) {
 	// Adding | <-   -> | around the lines to avoid dealing with training spaces
 	// in example output checking.
 	fmt.Fprint(w.w, "| ")
@@ -56,7 +55,7 @@ func (w *DebugWriter) PrintHeader(df dataframe.Dataframe) {
 	fmt.Fprint(w.w, "|\n")
 }
 
-func (w *DebugWriter) PrintRow(s dataframe.Schema, r dataframe.Row) {
+func (w *Writer) PrintRow(s dataframe.Schema, r dataframe.Row) {
 	fmt.Fprint(w.w, "| ")
 	for i, cell := range r {
 		c := s[i]
@@ -79,10 +78,13 @@ func (w *DebugWriter) PrintRow(s dataframe.Schema, r dataframe.Row) {
 	fmt.Fprint(w.w, "|\n")
 }
 
-func (w *DebugWriter) Close() error {
-	err := w.w.Flush()
-	if err != nil {
+func (w *Writer) Close() error {
+	if err := w.w.Flush(); err != nil {
 		return err
+	}
+
+	if w.nextW != nil {
+		return w.nextW.Close()
 	}
 	return nil
 }

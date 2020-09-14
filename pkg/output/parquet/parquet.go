@@ -4,30 +4,26 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/pkg/errors"
-	parquetwriter "github.com/xitongsys/parquet-go-source/writerfile"
-	"github.com/xitongsys/parquet-go/parquet"
-
-	// "github.com/xitongsys/parquet-go/compress"
-	"github.com/xitongsys/parquet-go/source"
-	"github.com/xitongsys/parquet-go/writer"
-
 	"github.com/thanos-community/obslytics/pkg/dataframe"
 	"github.com/thanos-community/obslytics/pkg/output"
+	parquetwriter "github.com/xitongsys/parquet-go-source/writerfile"
+	"github.com/xitongsys/parquet-go/parquet"
+	"github.com/xitongsys/parquet-go/source"
+	"github.com/xitongsys/parquet-go/writer"
 )
 
-// ParquetOutput implements output.Output interface
-type ParquetOutput struct{}
+// Output implements output.Output interface.
+type Output struct{}
 
-func (o ParquetOutput) Open(_ context.Context, params output.OutputParams) (output.Writer, error) {
-	w, err := os.Create(params.OutFile)
-	if err != nil {
-		return nil, errors.Wrap(err, "error opening file")
-	}
-	return NewParquetWriter(w), nil
+func NewOutput() Output {
+	return Output{}
+}
+
+func (o Output) Open(_ context.Context, params output.Params) (output.Writer, error) {
+	return newParquetWriter(params.Out), nil
 }
 
 // parquetWriter Implements output.Writer.
@@ -35,12 +31,10 @@ type parquetWriter struct {
 	w     io.WriteCloser
 	parqf source.ParquetFile
 	parqw *writer.CSVWriter
-	//started bool
 }
 
-func NewParquetWriter(w io.WriteCloser) *parquetWriter {
-	parqf := parquetwriter.NewWriterFile(w)
-	return &parquetWriter{w: w, parqf: parqf}
+func newParquetWriter(w io.WriteCloser) *parquetWriter {
+	return &parquetWriter{w: w, parqf: parquetwriter.NewWriterFile(w)}
 }
 
 func (w *parquetWriter) Write(df dataframe.Dataframe) error {
@@ -65,7 +59,7 @@ func (w *parquetWriter) Write(df dataframe.Dataframe) error {
 				d = append(d, cell)
 			case dataframe.TypeUint:
 				v := cell.(uint64)
-				// there has been some issue with uint and paruqet-go, typecasting to int64 instead
+				// There has been some issue with uint and parquet-go, typecasting to int64 instead.
 				d = append(d, int64(v))
 			case dataframe.TypeTime:
 				v := cell.(time.Time)

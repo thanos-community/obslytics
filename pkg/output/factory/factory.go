@@ -7,6 +7,6 @@ import (
 
 func Parse(output []byte) (output.Output, error) {
 	// TODO(inecas): Add output configuration support.
-	out := parquet.ParquetOutput{}
+	out := parquet.Output{}
 	return out, nil
 }

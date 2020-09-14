@@ -8,8 +8,13 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/run"
+	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-community/obslytics/pkg/input"
 	"github.com/thanos-community/obslytics/pkg/output"
+	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/runutil"
 
 	"github.com/thanos-community/obslytics/pkg/output/debug"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -21,33 +26,34 @@ import (
 )
 
 func registerExport(m map[string]setupFunc, app *kingpin.Application) {
-	cmd := app.Command("export", "Export Observability Data into popular analytics formats.")
+	cmd := app.Command("export", "Export observability data into popular analytics formats.")
 	inputFlag := extflag.RegisterPathOrContent(cmd, "input-config", "YAML for input configuration.", true)
 	// TODO(inecas): add support for output configuration.
 	outputFlag := extflag.RegisterPathOrContent(cmd, "output-config", "YAML for output configuration.", false)
 
-	seriesParams := input.SeriesParams{}
-	cmd.Flag("match", "Name of the metric to export").Required().StringVar(&seriesParams.Matcher)
+	// TODO(bwplotka): Describe more how the format looks like.
+	matchersStr := cmd.Flag("match", "Metric matcher for metrics to export (e.g up{a=\"1\"}").Required().String()
 	timeFmt := time.RFC3339
 
+	var mint, maxt model.TimeOrDurationValue
 	cmd.Flag("min-time", fmt.Sprintf("The lower boundary of the time series in %s or duration format", timeFmt)).
-		Required().SetValue(&seriesParams.MinTime)
+		Required().SetValue(&mint)
 
 	cmd.Flag("max-time", fmt.Sprintf("The upper boundary of the time series in %s or duration format", timeFmt)).
-		Required().SetValue(&seriesParams.MaxTime)
+		Required().SetValue(&maxt)
 
-	var resolution time.Duration
-	cmd.Flag("resolution", "Sample resolution (e.g. 30m)").Required().DurationVar(&resolution)
-
-	dbgOut := false
-	cmd.Flag("debug", "Show additional debug info (such as produced table)").BoolVar(&dbgOut)
-
-	outParams := output.OutputParams{}
-	cmd.Flag("out", "Output file").Required().StringVar(&outParams.OutFile)
+	resolution := cmd.Flag("resolution", "Sample resolution (e.g. 30m)").Required().Duration()
+	dbgOut := cmd.Flag("debug", "Show additional debug info (such as produced table)").Bool()
+	outFile := cmd.Flag("out", "Output file").Required().String()
 
 	m["export"] = func(g *run.Group, logger log.Logger) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
+			matchers, err := parser.ParseMetricSelector(*matchersStr)
+			if err != nil {
+				return errors.Wrap(err, "parsing provided matchers")
+			}
+
 			inputCfg, err := inputFlag.Content()
 			if err != nil {
 				return err
@@ -56,20 +62,6 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 			if err != nil {
 				return err
 			}
-
-			ser, err := in.Open(ctx, seriesParams)
-			if err != nil {
-				return err
-			}
-
-			a := ingest.NewAggregator(resolution, func(o *ingest.AggrsOptions) {
-				// TODO(inecas): Expose the enabled aggregations via flag.
-				o.Count.Enabled = true
-				o.Sum.Enabled = true
-				o.Min.Enabled = true
-				o.Max.Enabled = true
-			})
-
 			outputCfg, err := outputFlag.Content()
 			if err != nil {
 				return err
@@ -79,19 +71,41 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				return err
 			}
 
-			w, err := out.Open(ctx, outParams)
+			w, err := os.Create(*outFile)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "opening file %v", *outFile)
 			}
-			defer w.Close()
-
-			if dbgOut {
-				w = debug.NewDebugWriter(os.Stdout, w)
-				defer w.Close()
-			}
-
-			return ingest.ProcessAll(ser, a, w)
+			return export(ctx, logger, in, input.SeriesParams{
+				Matchers: matchers,
+				MinTime:  timestamp.Time(mint.PrometheusTimestamp()),
+				MaxTime:  timestamp.Time(maxt.PrometheusTimestamp()),
+			}, *resolution, out, output.Params{Out: w}, *dbgOut)
 		}, func(error) { cancel() })
 		return nil
 	}
+}
+
+func export(ctx context.Context, logger log.Logger, in input.Input, seriesParams input.SeriesParams, resolution time.Duration, out output.Output, outParams output.Params, dbgOut bool) error {
+	ser, err := in.Open(ctx, seriesParams)
+	if err != nil {
+		return err
+	}
+
+	a := ingest.NewAggregator(resolution, func(o *ingest.AggrsOptions) {
+		// TODO(inecas): Expose the enabled aggregations via flag.
+		o.Count.Enabled = true
+		o.Sum.Enabled = true
+		o.Min.Enabled = true
+		o.Max.Enabled = true
+	})
+
+	w, err := out.Open(ctx, outParams)
+	if err != nil {
+		return err
+	}
+	if dbgOut {
+		w = debug.NewWriter(os.Stdout, w)
+	}
+	defer runutil.CloseWithLogOnErr(logger, w, "close output")
+	return ingest.ProcessAll(ser, a, w)
 }

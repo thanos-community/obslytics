@@ -7,7 +7,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	http_util "github.com/thanos-io/thanos/pkg/http"
-	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 )
 
 // InputConfig contains the options determining the endpoint to talk to.
@@ -18,9 +17,9 @@ type InputConfig struct {
 
 // SeriesParams determines what data should be loaded from the input.
 type SeriesParams struct {
-	Matcher string
-	MinTime thanosmodel.TimeOrDurationValue
-	MaxTime thanosmodel.TimeOrDurationValue
+	Matchers []*labels.Matcher
+	MinTime  time.Time
+	MaxTime  time.Time
 }
 
 type Input interface {
@@ -34,7 +33,7 @@ type SeriesIterator interface {
 	Close() error
 }
 
-// Series exposes data for a single series (determined by a label)
+// Series exposes data for a single series (determined by a label).
 type Series interface {
 	Labels() labels.Labels
 	// The earliest time of all chunks in the series. Zero time if no chunks present.

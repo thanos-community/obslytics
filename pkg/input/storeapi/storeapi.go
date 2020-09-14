@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -21,7 +20,7 @@ import (
 	"github.com/thanos-community/obslytics/pkg/input"
 )
 
-// storeAPIInput implements input.Input
+// storeAPIInput implements input.Input.
 type storeAPIInput struct {
 	logger log.Logger
 	conf   input.InputConfig
@@ -29,19 +28,6 @@ type storeAPIInput struct {
 
 func NewStoreAPIInput(logger log.Logger, conf input.InputConfig) (storeAPIInput, error) {
 	return storeAPIInput{logger: logger, conf: conf}, nil
-}
-
-func parseStoreMatchers(matcherStr string) (storeMatchers []storepb.LabelMatcher, err error) {
-	matchers, err := parser.ParseMetricSelector(matcherStr)
-	if err != nil {
-		return nil, err
-	}
-	stm, err := storepb.TranslatePromMatchers(matchers...)
-	if err != nil {
-		return nil, err
-	}
-
-	return stm, nil
 }
 
 func (i storeAPIInput) Open(ctx context.Context, params input.SeriesParams) (input.SeriesIterator, error) {
@@ -61,18 +47,22 @@ func (i storeAPIInput) Open(ctx context.Context, params input.SeriesParams) (inp
 		return nil, errors.Wrap(err, "error initializing GRPC dial context")
 	}
 
-	matchers, err := parseStoreMatchers(params.Matcher)
+	matchers, err := storepb.TranslatePromMatchers(params.Matchers...)
 	if err != nil {
-		return nil, errors.Wrap(err, "error parsing provided matchers")
+		return nil, err
 	}
 
 	client := storepb.NewStoreClient(conn)
 	seriesClient, err := client.Series(ctx, &storepb.SeriesRequest{
-		MinTime:                 params.MinTime.PrometheusTimestamp(),
-		MaxTime:                 params.MaxTime.PrometheusTimestamp(),
+		MinTime:                 timestamp.FromTime(params.MinTime),
+		MaxTime:                 timestamp.FromTime(params.MaxTime),
 		Matchers:                matchers,
 		PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "storepb.Series against %v", i.conf.Endpoint)
+	}
+
 	return &storeSeriesIterator{
 		logger: i.logger,
 		ctx:    ctx,

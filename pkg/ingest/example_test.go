@@ -23,19 +23,18 @@ func ExampleAggregator() {
 	})
 
 	for _, s := range sampleSeries() {
-		err := a.Ingest(s)
-		if err != nil {
+		if err := a.Ingest(s); err != nil {
 			fmt.Print(err)
 			return
 		}
 	}
-	a.Finalize()
+	_ = a.Finalize()
 	df, _ := a.Flush()
 
-	w := debug.NewDebugWriter(os.Stdout, nil)
+	w := debug.NewWriter(os.Stdout, nil)
 	defer w.Close()
 
-	w.Write(df)
+	_ = w.Write(df)
 	// Unordered output:
 	// | dialer_name   _sample_start  _sample_end  _min_time  _max_time  _count  _sum  _min  _max  |
 	// | prometheus    10:00:00       10:30:00     10:04:02   10:19:02   2       1     0     1     |
@@ -50,7 +49,7 @@ func ExampleAggregator() {
 
 func ExampleProcess() {
 	a := NewAggregator(30*time.Minute, func(o *AggrsOptions) { o.Max.Enabled = true })
-	w := debug.NewDebugWriter(os.Stdout, nil)
+	w := debug.NewWriter(os.Stdout, nil)
 	defer w.Close()
 
 	for _, s := range sampleSeries() {
@@ -60,8 +59,7 @@ func ExampleProcess() {
 			return
 		}
 	}
-	err := ProcessFinalize(a, w)
-	if err != nil {
+	if err := ProcessFinalize(a, w); err != nil {
 		fmt.Print(err)
 		return
 	}
@@ -79,12 +77,11 @@ func ExampleProcess() {
 
 func ExampleProcessAll() {
 	a := NewAggregator(30*time.Minute, func(o *AggrsOptions) { o.Max.Enabled = true })
-	w := debug.NewDebugWriter(os.Stdout, nil)
+	w := debug.NewWriter(os.Stdout, nil)
 	defer w.Close()
 
 	i := NewSeriesIterator(sampleSeries())
-	err := ProcessAll(i, a, w)
-	if err != nil {
+	if err := ProcessAll(i, a, w); err != nil {
 		fmt.Print(err)
 		return
 	}
@@ -100,7 +97,7 @@ func ExampleProcessAll() {
 
 }
 
-// seriesIterator implements input.SeriesIterator
+// seriesIterator implements input.SeriesIterator.
 type seriesIterator struct {
 	series []input.Series
 	pos    int
