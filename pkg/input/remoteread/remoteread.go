@@ -3,13 +3,16 @@ package remoteread
 import (
 	"context"
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-community/obslytics/pkg/input"
+	"github.com/thanos-community/obslytics/pkg/version"
 	"net/url"
 
 	"time"
@@ -22,6 +25,30 @@ type remoteReadInput struct {
 
 func NewRemoteReadInput(logger log.Logger, conf input.InputConfig) (remoteReadInput, error) {
 	return remoteReadInput{logger: logger, conf: conf}, nil
+}
+
+// TranslatePromMatchers returns proto matchers (prompb) from Prometheus matchers.
+// NOTE: It allocates memory.
+func TranslatePromMatchers(ms ...*labels.Matcher) ([]*prompb.LabelMatcher, error) {
+	res := make([]*prompb.LabelMatcher, 0, len(ms))
+	for _, m := range ms {
+		var t prompb.LabelMatcher_Type
+
+		switch m.Type {
+		case labels.MatchEqual:
+			t = prompb.LabelMatcher_EQ
+		case labels.MatchNotEqual:
+			t = prompb.LabelMatcher_NEQ
+		case labels.MatchRegexp:
+			t = prompb.LabelMatcher_RE
+		case labels.MatchNotRegexp:
+			t = prompb.LabelMatcher_NRE
+		default:
+			return nil, errors.Errorf("unrecognized matcher type %d", m.Type)
+		}
+		res = append(res, &prompb.LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
+	}
+	return res, nil
 }
 
 func (i remoteReadInput) Open(ctx context.Context, params input.SeriesParams) (input.SeriesIterator, error) {
@@ -53,24 +80,26 @@ func (i remoteReadInput) Open(ctx context.Context, params input.SeriesParams) (i
 		HTTPClientConfig: httpConfig,
 	}
 
-	client, err := remote.NewReadClient("Obslytics/v0.1", clientConfig)
+	clientName := "Obslytics/" + version.Version
+	client, err := remote.NewReadClient(clientName, clientConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	queryLabel := &prompb.LabelMatcher{
-		Type:  0,
-		Name:  "__name__",
-		Value: params.Metric,
+	labelMatchers, err := parser.ParseMetricSelector(params.Matcher)
+	if err != nil {
+		return nil, err
 	}
-	var queryLabelList = make([]*prompb.LabelMatcher, 1)
-	queryLabelList[0] = queryLabel
 
-	params.MinTime.Unix()
+	promLabelMatchers, err := TranslatePromMatchers(labelMatchers...)
+	if err != nil {
+		return nil, err
+	}
+
 	query := &prompb.Query{
-		StartTimestampMs: params.MinTime.Unix() * 1000,
-		EndTimestampMs:   params.MaxTime.Unix() * 1000,
-		Matchers:         queryLabelList,
+		StartTimestampMs: params.MinTime,
+		EndTimestampMs:   params.MaxTime,
+		Matchers:         promLabelMatchers,
 	}
 
 	readResponse, err := client.Read(ctx, query)
