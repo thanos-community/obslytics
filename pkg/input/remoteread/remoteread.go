@@ -7,8 +7,8 @@ import (
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/prompb"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-community/obslytics/pkg/input"
@@ -86,19 +86,15 @@ func (i remoteReadInput) Open(ctx context.Context, params input.SeriesParams) (i
 		return nil, err
 	}
 
-	labelMatchers, err := parser.ParseMetricSelector(params.Matcher)
+	promLabelMatchers, err := TranslatePromMatchers(params.Matchers...)
 	if err != nil {
 		return nil, err
 	}
 
-	promLabelMatchers, err := TranslatePromMatchers(labelMatchers...)
-	if err != nil {
-		return nil, err
-	}
-
+	// Contruct Query
 	query := &prompb.Query{
-		StartTimestampMs: params.MinTime,
-		EndTimestampMs:   params.MaxTime,
+		StartTimestampMs: timestamp.FromTime(params.MinTime),
+		EndTimestampMs:   timestamp.FromTime(params.MaxTime),
 		Matchers:         promLabelMatchers,
 	}
 
