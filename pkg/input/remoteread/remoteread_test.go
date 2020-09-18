@@ -97,6 +97,9 @@ func TestRemoteReadInput_Open(t *testing.T) {
 		inSeriesIter, err := remoteReadInput.Open(ctx, inSeriesParams)
 		testutil.Ok(t, err)
 
+		// Go to the first series
+		testutil.Assert(t, inSeriesIter.Next() == true)
+
 		currentSeries := inSeriesIter.At()
 		currentSeriesChunkIter, err := currentSeries.ChunkIterator()
 		testutil.Ok(t, err)
@@ -104,19 +107,19 @@ func TestRemoteReadInput_Open(t *testing.T) {
 		// test for "__name__" label value
 		testutil.Assert(t, "prometheus_tsdb_head_series" == currentSeries.Labels().Get("__name__"))
 
-		metricTimestamp, metricValue := currentSeriesChunkIter.At()
-		testutil.Ok(t, err)
+		// Go to the first sample
+		testutil.Assert(t, currentSeriesChunkIter.Next() == true)
 
+		// Current Sample
+		metricTimestamp, metricValue := currentSeriesChunkIter.At()
 		// Check if metric timestamp is valid
 		testutil.Assert(t, metricTimestamp > 0)
 		// The first metric value is 0
 		testutil.Assert(t, metricValue == 0)
 
-		// Test if iteration inside chunk works
+		// Test if iteration inside chunk works, go to next sample
 		testutil.Assert(t, currentSeriesChunkIter.Next())
-
 		metricTimestamp, metricValue = currentSeriesChunkIter.At()
-
 		// Check if metric timestamp is valid
 		testutil.Assert(t, metricTimestamp > 0)
 		// The second metric value is non 0

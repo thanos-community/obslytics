@@ -117,7 +117,7 @@ func (i remoteReadInput) Open(ctx context.Context, params input.SeriesParams) (i
 		ctx:                ctx,
 		client:             client,
 		seriesList:         readSeriesList,
-		currentSeriesIndex: 0,
+		currentSeriesIndex: -1,
 		maxSeriesIndex:     len(readSeriesList) - 1,
 	}, nil
 }
@@ -209,6 +209,9 @@ func (c *ReadChunkIterator) Next() bool {
 // Seek returns true, if such sample exists, false otherwise.
 // Iterator is exhausted when the Seek returns false.
 func (c *ReadChunkIterator) Seek(t int64) bool {
+	if c.currentSampleIndex < 0 {
+		c.currentSampleIndex = 0
+	}
 	for c.Chunk.series.Samples[c.currentSampleIndex].Timestamp < t {
 		if !c.Next() {
 			return false
@@ -235,5 +238,5 @@ type ReadChunk struct {
 }
 
 func (c ReadChunk) Iterator() input.ChunkIterator {
-	return &ReadChunkIterator{Chunk: c, currentSampleIndex: 0, maxSampleIndex: len(c.series.Samples) - 1}
+	return &ReadChunkIterator{Chunk: c, currentSampleIndex: -1, maxSampleIndex: len(c.series.Samples) - 1}
 }
