@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thanos-community/obslytics/pkg/input/promread"
+
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -68,10 +70,10 @@ rule_files:
 	return config
 }
 
-func TestThanos_Parquet_e2e(t *testing.T) {
+func TestThanos_Parquet_e2e_storeapi(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("e2e_test_thanos_parquet")
+	s, err := e2e.NewScenario("e2e_test_thanos_parquet_storeapi")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
@@ -86,7 +88,7 @@ func TestThanos_Parquet_e2e(t *testing.T) {
 	testutil.Ok(t, prom.WaitSumMetricsWithOptions(e2e.Greater(512), []string{"prometheus_tsdb_head_samples_appended_total"}, e2e.WaitMissingMetrics))
 
 	logger := log.NewLogfmtLogger(os.Stderr)
-	t.Run("export up metric to parquet file", func(t *testing.T) {
+	t.Run("export up metric to parquet file using thanos storeapi", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
@@ -124,4 +126,59 @@ func TestThanos_Parquet_e2e(t *testing.T) {
 	})
 }
 
-// TODO(bwplotka): Add Prometheus remote read test once remote read input is ready.
+func TestProm_Parquet_e2e_promread(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_prom_parquet_promread")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+	prom, _, err := e2ethanos.NewPrometheus(s.SharedDir(), s.NetworkName(), defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(prom))
+
+	testutil.Ok(t, prom.WaitSumMetricsWithOptions(e2e.Greater(512), []string{"prometheus_tsdb_head_samples_appended_total"}, e2e.WaitMissingMetrics))
+
+	logger := log.NewLogfmtLogger(os.Stderr)
+
+	t.Run("export up metric to parquet file using prometheus remoteread api", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+
+		api, err := promread.NewRemoteReadInput(logger, input.InputConfig{
+			Endpoint: "http://" + prom.HTTPEndpoint() + "/api/v1/read",
+			TLSConfig: http.TLSConfig{
+				InsecureSkipVerify: true,
+			},
+		},
+		)
+
+		testutil.Ok(t, err)
+
+		b := bytes.Buffer{}
+		testutil.Ok(t, export(
+			ctx,
+			logger,
+			api,
+			input.SeriesParams{
+				Matchers: []*labels.Matcher{
+					labels.MustNewMatcher(labels.MatchEqual, "__name__", "prometheus_tsdb_head_samples_appended_total"),
+				},
+				MinTime: time.Now().Add(-6 * time.Hour),
+				MaxTime: timestamp.Time(math.MaxInt64),
+			},
+			1*time.Second,
+			parquet.NewOutput(),
+			output.Params{Out: output.NopWriteCloser(&b)},
+			true,
+		))
+
+		// TODO(bwplotka): Assert properly the actual result, vs what metric actually gives.
+		testutil.Assert(t, 1610 <= b.Len()) // Output varies from 2197 to 1610, debug shows me sometimes two rows, is this expected?
+		/*
+			| instance        job     prometheus  replica  _sample_start  _sample_end  _min_time  _max_time  _count  _sum  _min  _max  |
+			| localhost:9090  myself  test        0        00:30:21       00:30:22     04:30:21   04:30:21   1       0     0     0     |
+			| localhost:9090  myself  test        0        00:30:22       00:30:23     04:30:22   04:30:22   1       353   353   353   |
+		*/
+	})
+}
