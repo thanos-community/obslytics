@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -66,20 +67,44 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 			if err != nil {
 				return err
 			}
-			out, err := outfactory.Parse(outputCfg)
+			storageBucket, out, err := outfactory.Parse(logger, outputCfg)
 			if err != nil {
 				return err
 			}
 
-			w, err := os.Create(*outFile)
+			// Store output file to a temp directory, then later upload it to object storage.
+			outFileName := path.Join(os.TempDir(), *outFile)
+			err = os.MkdirAll(path.Dir(outFileName), os.ModePerm)
 			if err != nil {
-				return errors.Wrapf(err, "opening file %v", *outFile)
+				return errors.Wrapf(err, "creating parent dirs")
 			}
-			return export(ctx, logger, in, input.SeriesParams{
+			w, err := os.Create(outFileName)
+			if err != nil {
+				return errors.Wrapf(err, "creating file %v", outFileName)
+			}
+
+			err = export(ctx, logger, in, input.SeriesParams{
 				Matchers: matchers,
 				MinTime:  timestamp.Time(mint.PrometheusTimestamp()),
 				MaxTime:  timestamp.Time(maxt.PrometheusTimestamp()),
 			}, *resolution, out, output.Params{Out: w}, *dbgOut)
+			if err != nil {
+				return errors.Wrapf(err, "opening file %v", outFileName)
+			}
+
+			// Upload Output file from temp directory to Object Storage.
+			tempFile, err := os.Open(outFileName)
+			if err != nil {
+				return errors.Wrapf(err, "opening file %v", outFileName)
+			}
+			err = storageBucket.Upload(ctx, *outFile, tempFile)
+			if err != nil {
+				return errors.Wrapf(err, "Uploading file to Object Storage")
+			}
+
+			//TODO (4n4nd): Delete temp files after they are uploaded
+
+			return err
 		}, func(error) { cancel() })
 		return nil
 	}

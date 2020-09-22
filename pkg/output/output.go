@@ -5,7 +5,20 @@ import (
 	"io"
 
 	"github.com/thanos-community/obslytics/pkg/dataframe"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
 )
+
+type Type string
+
+const (
+	PARQUET Type = "PARQUET"
+)
+
+// OutputConfig contains the options determining the object storage where files will be uploaded to.
+type OutputConfig struct {
+	client.BucketConfig `yaml:"storage"`
+	OutputType          Type `yaml:"type"`
+}
 
 type nopWriteCloser struct {
 	io.Writer

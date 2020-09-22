@@ -9,10 +9,18 @@ import (
 	http_util "github.com/thanos-io/thanos/pkg/http"
 )
 
+type Type string
+
+const (
+	REMOTEREAD Type = "REMOTEREAD"
+	STOREAPI   Type = "STOREAPI"
+)
+
 // InputConfig contains the options determining the endpoint to talk to.
 type InputConfig struct {
 	Endpoint  string              `yaml:"endpoint"`
 	TLSConfig http_util.TLSConfig `yaml:"tls_config"`
+	Type      Type                `yaml:"type"`
 }
 
 // SeriesParams determines what data should be loaded from the input.
