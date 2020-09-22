@@ -1,8 +1,12 @@
-package remoteread
+package promread
 
 import (
 	"context"
 	"fmt"
+	"math"
+	"testing"
+	"time"
+
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -10,9 +14,6 @@ import (
 	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
-	"math"
-	"testing"
-	"time"
 )
 
 // defaultPromConfig returns Prometheus config that sets Prometheus to:
@@ -97,38 +98,38 @@ func TestRemoteReadInput_Open(t *testing.T) {
 		inSeriesIter, err := remoteReadInput.Open(ctx, inSeriesParams)
 		testutil.Ok(t, err)
 
-		// Go to the first series
+		// Go to the first series.
 		testutil.Assert(t, inSeriesIter.Next() == true)
 
 		currentSeries := inSeriesIter.At()
 		currentSeriesChunkIter, err := currentSeries.ChunkIterator()
 		testutil.Ok(t, err)
 
-		// test for "__name__" label value
+		// Test for "__name__" label value.
 		testutil.Assert(t, "prometheus_tsdb_head_series" == currentSeries.Labels().Get("__name__"))
 
-		// Go to the first sample
+		// Go to the first sample.
 		testutil.Assert(t, currentSeriesChunkIter.Next() == true)
 
-		// Current Sample
+		// Current Sample.
 		metricTimestamp, metricValue := currentSeriesChunkIter.At()
-		// Check if metric timestamp is valid
+		// Check if metric timestamp is valid.
 		testutil.Assert(t, metricTimestamp > 0)
-		// The first metric value is 0
+		// The first metric value is 0.
 		testutil.Assert(t, metricValue == 0)
 
-		// Test if iteration inside chunk works, go to next sample
+		// Test if iteration inside chunk works, go to next sample.
 		testutil.Assert(t, currentSeriesChunkIter.Next())
 		metricTimestamp, metricValue = currentSeriesChunkIter.At()
-		// Check if metric timestamp is valid
+		// Check if metric timestamp is valid.
 		testutil.Assert(t, metricTimestamp > 0)
-		// The second metric value is non 0
+		// The second metric value is non 0.
 		testutil.Assert(t, metricValue > 0)
 
-		// There are only two metric values inside the chunk, so this should return false
+		// There are only two metric values inside the chunk, so this should return false.
 		testutil.Assert(t, !currentSeriesChunkIter.Next())
 
-		// There is only one series, so this should return false
+		// There is only one series, so this should return false.
 		testutil.Assert(t, !inSeriesIter.Next())
 
 	})

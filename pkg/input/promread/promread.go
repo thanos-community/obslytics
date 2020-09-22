@@ -1,7 +1,9 @@
-package remoteread
+package promread
 
 import (
 	"context"
+	"net/url"
+
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
@@ -13,18 +15,17 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-community/obslytics/pkg/input"
 	"github.com/thanos-community/obslytics/pkg/version"
-	"net/url"
 
 	"time"
 )
 
-type remoteReadInput struct {
+type promReadInput struct {
 	logger log.Logger
 	conf   input.InputConfig
 }
 
-func NewRemoteReadInput(logger log.Logger, conf input.InputConfig) (remoteReadInput, error) {
-	return remoteReadInput{logger: logger, conf: conf}, nil
+func NewRemoteReadInput(logger log.Logger, conf input.InputConfig) (promReadInput, error) {
+	return promReadInput{logger: logger, conf: conf}, nil
 }
 
 // TranslatePromMatchers returns proto matchers (prompb) from Prometheus matchers.
@@ -51,7 +52,7 @@ func TranslatePromMatchers(ms ...*labels.Matcher) ([]*prompb.LabelMatcher, error
 	return res, nil
 }
 
-func (i remoteReadInput) Open(ctx context.Context, params input.SeriesParams) (input.SeriesIterator, error) {
+func (i promReadInput) Open(ctx context.Context, params input.SeriesParams) (input.SeriesIterator, error) {
 
 	tlsConfig := config_util.TLSConfig{
 		CAFile:             i.conf.TLSConfig.CAFile,
@@ -73,15 +74,14 @@ func (i remoteReadInput) Open(ctx context.Context, params input.SeriesParams) (i
 	if err != nil {
 		return nil, err
 	}
-	endpointUrl := &config_util.URL{URL: parsedUrl}
+
 	clientConfig := &remote.ClientConfig{
-		URL:              endpointUrl,
+		URL:              &config_util.URL{URL: parsedUrl},
 		Timeout:          timeoutDuration,
 		HTTPClientConfig: httpConfig,
 	}
 
-	clientName := "Obslytics/" + version.Version
-	client, err := remote.NewReadClient(clientName, clientConfig)
+	client, err := remote.NewReadClient("Obslytics/"+version.Version, clientConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -91,21 +91,21 @@ func (i remoteReadInput) Open(ctx context.Context, params input.SeriesParams) (i
 		return nil, err
 	}
 
-	// Contruct Query
+	// Contruct Query.
 	query := &prompb.Query{
 		StartTimestampMs: timestamp.FromTime(params.MinTime),
 		EndTimestampMs:   timestamp.FromTime(params.MaxTime),
 		Matchers:         promLabelMatchers,
 	}
-
+	// TODO: Move to streaming remote read version when available.
 	readResponse, err := client.Read(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 
-	var readSeriesList = make([]ReadSeries, 0, len(readResponse.Timeseries))
+	readSeriesList := make([]ReadSeries, 0, len(readResponse.Timeseries))
 
-	// Convert Timeseries List to a Read Series List
+	// Convert Timeseries List to a Read Series List.
 	for index := range readResponse.Timeseries {
 		readSeriesList = append(readSeriesList, ReadSeries{
 			timeseries: *readResponse.Timeseries[index],
@@ -118,29 +118,27 @@ func (i remoteReadInput) Open(ctx context.Context, params input.SeriesParams) (i
 		client:             client,
 		seriesList:         readSeriesList,
 		currentSeriesIndex: -1,
-		maxSeriesIndex:     len(readSeriesList) - 1,
 	}, nil
 }
 
-// readSeriesIterator implements input.SeriesIterator
+// readSeriesIterator implements input.SeriesIterator.
 type readSeriesIterator struct {
 	logger             log.Logger
 	ctx                context.Context
 	client             remote.ReadClient
 	seriesList         []ReadSeries
 	currentSeriesIndex int
-	maxSeriesIndex     int
 }
 
 func (i *readSeriesIterator) Next() bool {
 
-	// return false if the last index is already reached
-	if i.currentSeriesIndex+1 > i.maxSeriesIndex {
+	// Return false if the last index is already reached.
+	if i.currentSeriesIndex+1 > len(i.seriesList)-1 {
 		return false
-	} else {
-		i.currentSeriesIndex++
-		return true
 	}
+	i.currentSeriesIndex++
+	return true
+
 }
 
 func (i *readSeriesIterator) At() input.Series {
@@ -151,7 +149,7 @@ func (i *readSeriesIterator) Close() error {
 	return nil
 }
 
-// ReadSeries implements input.Series
+// ReadSeries implements input.Series.
 type ReadSeries struct {
 	input.Series
 	timeseries prompb.TimeSeries
@@ -171,11 +169,7 @@ func (r ReadSeries) Labels() labels.Labels {
 }
 
 func (r ReadSeries) MinTime() time.Time {
-
-	seconds := r.timeseries.Samples[0].Timestamp / 1000
-	nanoseconds := r.timeseries.Samples[0].Timestamp % 1000 * 1000000
-
-	return time.Unix(seconds, nanoseconds)
+	return timestamp.Time(r.timeseries.Samples[0].Timestamp)
 }
 
 func (r ReadSeries) ChunkIterator() (input.ChunkIterator, error) {
@@ -186,22 +180,20 @@ func (r ReadSeries) ChunkIterator() (input.ChunkIterator, error) {
 	return iterator, nil
 }
 
-// ReadChunkIterator implements input.ChunkIterator
+// ReadChunkIterator implements input.ChunkIterator.
 type ReadChunkIterator struct {
 	input.ChunkIterator
 	Chunk              ReadChunk
 	currentSampleIndex int
-	maxSampleIndex     int
 }
 
 func (c *ReadChunkIterator) Next() bool {
-	// return false if the last index is reached
-	if c.currentSampleIndex+1 > c.maxSampleIndex {
+	// Return false if the last index is reached.
+	if c.currentSampleIndex+1 > len(c.Chunk.series.Samples)-1 {
 		return false
-	} else {
-		c.currentSampleIndex++
-		return true
 	}
+	c.currentSampleIndex++
+	return true
 }
 
 // Seek advances the iterator forward to the first sample with the timestamp equal or greater than t.
@@ -238,5 +230,5 @@ type ReadChunk struct {
 }
 
 func (c ReadChunk) Iterator() input.ChunkIterator {
-	return &ReadChunkIterator{Chunk: c, currentSampleIndex: -1, maxSampleIndex: len(c.series.Samples) - 1}
+	return &ReadChunkIterator{Chunk: c, currentSampleIndex: -1}
 }
