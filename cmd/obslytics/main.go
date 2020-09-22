@@ -44,7 +44,7 @@ func main() {
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "Error parsing commandline arguments"))
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "error parsing commandline arguments"))
 		app.Usage(os.Args[1:])
 		os.Exit(2)
 	}
