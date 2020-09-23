@@ -3,11 +3,10 @@ module github.com/thanos-community/obslytics
 go 1.14
 
 require (
-	github.com/Azure/azure-sdk-for-go v45.0.0+incompatible // indirect
 	github.com/Azure/go-autorest/autorest/to v0.4.0 // indirect
 	github.com/Azure/go-autorest/autorest/validation v0.3.0 // indirect
 	github.com/OneOfOne/xxhash v1.2.6 // indirect
-	github.com/aws/aws-sdk-go v1.33.17 // indirect
+	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
 	github.com/containerd/containerd v1.3.6 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
@@ -24,29 +23,25 @@ require (
 	github.com/gorilla/websocket v1.4.0 // indirect
 	github.com/hashicorp/go-hclog v0.14.1 // indirect
 	github.com/hashicorp/go-msgpack v0.5.5 // indirect
-	github.com/hashicorp/serf v0.9.3 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect
 	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/mattn/go-ieproxy v0.0.0-20191113090002-7c0f6868bffe // indirect
-	github.com/miekg/dns v1.1.31 // indirect
 	github.com/mitchellh/mapstructure v1.3.3 // indirect
 	github.com/oklog/run v1.1.0
 	github.com/onsi/ginkgo v1.14.0 // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/common v0.11.1
-	github.com/prometheus/prometheus v1.8.2-0.20200819132913-cb830b0a9c78
+	github.com/prometheus/common v0.13.0
+	github.com/prometheus/prometheus v1.8.2-0.20200921162505-7e1c27b853ff
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
 	github.com/smartystreets/assertions v1.0.1 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stretchr/testify v1.6.1 // indirect
-	github.com/thanos-io/thanos v0.13.1-0.20200807203500-9b578afb4763
+	github.com/thanos-io/thanos v0.13.1-0.20200923065955-eebb166c0124
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/xitongsys/parquet-go v1.5.2
 	github.com/xitongsys/parquet-go-source v0.0.0-20200817004010-026bad9b25d0
 	go.uber.org/automaxprocs v1.3.0
 	go.uber.org/zap v1.14.1 // indirect
-	golang.org/x/sys v0.0.0-20200803210538-64077c9b5642 // indirect
-	golang.org/x/tools v0.0.0-20200806022845-90696ccdc692 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/grpc v1.30.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
@@ -62,9 +57,10 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
 	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.4.0
-	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200811193703-869f1bc587e6
+	github.com/prometheus/common => github.com/prometheus/common v0.13.0
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200922180708-b0145884d381
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
-	github.com/thanos-io/thanos => github.com/thanos-io/thanos v0.13.1-0.20200914133838-a0ef98215086
+	github.com/thanos-io/thanos => github.com/thanos-io/thanos v0.13.1-0.20200923065955-eebb166c0124
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	k8s.io/client-go => k8s.io/client-go v0.18.3
 	k8s.io/klog => k8s.io/klog v0.3.1
