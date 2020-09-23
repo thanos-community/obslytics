@@ -91,7 +91,7 @@ func (i promReadInput) Open(ctx context.Context, params input.SeriesParams) (inp
 		return nil, err
 	}
 
-	// Contruct Query.
+	// Construct Query.
 	query := &prompb.Query{
 		StartTimestampMs: timestamp.FromTime(params.MinTime),
 		EndTimestampMs:   timestamp.FromTime(params.MaxTime),
@@ -213,7 +213,7 @@ func (c *ReadChunkIterator) Seek(t int64) bool {
 }
 
 // At returns the current timestamp/value pair.
-// Before the iterator has advanced At behaviour is unspecified.
+// Before the iterator has advanced At behavior is unspecified.
 func (c *ReadChunkIterator) At() (int64, float64) {
 	return c.Chunk.series.Samples[c.currentSampleIndex].Timestamp, c.Chunk.series.Samples[c.currentSampleIndex].Value
 }
