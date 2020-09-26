@@ -36,7 +36,7 @@ require (
 	github.com/smartystreets/assertions v1.0.1 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stretchr/testify v1.6.1 // indirect
-	github.com/thanos-io/thanos v0.13.1-0.20200923065955-eebb166c0124
+	github.com/thanos-io/thanos v0.13.1-0.20200924085948-49dad93ed672
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/xitongsys/parquet-go v1.5.2
 	github.com/xitongsys/parquet-go-source v0.0.0-20200817004010-026bad9b25d0
@@ -60,7 +60,7 @@ replace (
 	github.com/prometheus/common => github.com/prometheus/common v0.13.0
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200922180708-b0145884d381
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
-	github.com/thanos-io/thanos => github.com/thanos-io/thanos v0.13.1-0.20200923065955-eebb166c0124
+	github.com/thanos-io/thanos => github.com/thanos-io/thanos v0.13.1-0.20200924085948-49dad93ed672
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	k8s.io/client-go => k8s.io/client-go v0.18.3
 	k8s.io/klog => k8s.io/klog v0.3.1

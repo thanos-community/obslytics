@@ -10,7 +10,7 @@ import (
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/thanos-community/obslytics/pkg/input"
+	"github.com/thanos-community/obslytics/pkg/series"
 	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -75,19 +75,19 @@ func TestRemoteReadInput_Open(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
-		inConfig := input.InputConfig{
+		inConfig := series.Config{
 			Endpoint: "http://" + prom.HTTPEndpoint() + "/api/v1/read",
 			TLSConfig: http_util.TLSConfig{
 				InsecureSkipVerify: true,
 			},
 		}
-		remoteReadInput, err := NewRemoteReadInput(nil, inConfig)
+		remoteReadInput, err := NewSeries(nil, inConfig)
 		testutil.Ok(t, err)
 
 		minT := time.Now().Add(-6 * time.Hour)
 		maxT := timestamp.Time(math.MaxInt64)
 
-		inSeriesParams := input.SeriesParams{
+		inSeriesParams := series.Params{
 			Matchers: []*labels.Matcher{
 				labels.MustNewMatcher(labels.MatchEqual, "__name__", "prometheus_tsdb_head_series"),
 			},
@@ -95,15 +95,14 @@ func TestRemoteReadInput_Open(t *testing.T) {
 			MaxTime: maxT,
 		}
 
-		inSeriesIter, err := remoteReadInput.Open(ctx, inSeriesParams)
+		inSeriesIter, err := remoteReadInput.Read(ctx, inSeriesParams)
 		testutil.Ok(t, err)
 
 		// Go to the first series.
 		testutil.Assert(t, inSeriesIter.Next() == true)
 
 		currentSeries := inSeriesIter.At()
-		currentSeriesChunkIter, err := currentSeries.ChunkIterator()
-		testutil.Ok(t, err)
+		currentSeriesChunkIter := currentSeries.Iterator()
 
 		// Test for "__name__" label value.
 		testutil.Assert(t, "prometheus_tsdb_head_series" == currentSeries.Labels().Get("__name__"))
