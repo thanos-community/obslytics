@@ -1,50 +1,40 @@
 package parquet
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/thanos-community/obslytics/pkg/dataframe"
-	"github.com/thanos-community/obslytics/pkg/output"
+	"github.com/thanos-community/obslytics/pkg/exporter"
 	parquetwriter "github.com/xitongsys/parquet-go-source/writerfile"
 	"github.com/xitongsys/parquet-go/parquet"
 	"github.com/xitongsys/parquet-go/source"
 	"github.com/xitongsys/parquet-go/writer"
 )
 
-// Output implements output.Output interface.
-type Output struct{}
+// Compile-time check if parquet Encoder implements exporter.Encoder interface.
+var _ exporter.Encoder = &Encoder{}
 
-func NewOutput() Output {
-	return Output{}
+type Encoder struct{}
+
+func NewEncoder() *Encoder {
+	return &Encoder{}
 }
 
-func (o Output) Open(_ context.Context, params output.Params) (output.Writer, error) {
-	return newParquetWriter(params.Out), nil
-}
-
-// parquetWriter Implements output.Writer.
-type parquetWriter struct {
-	w     io.WriteCloser
-	parqf source.ParquetFile
-	parqw *writer.CSVWriter
-}
-
-func newParquetWriter(w io.WriteCloser) *parquetWriter {
-	return &parquetWriter{w: w, parqf: parquetwriter.NewWriterFile(w)}
-}
-
-func (w *parquetWriter) Write(df dataframe.Dataframe) error {
-	if w.parqw == nil {
-		parqw, err := initCSVWriter(w.parqf, df)
-		if err != nil {
-			return errors.Wrap(err, "error initializing the schema")
-		}
-		w.parqw = parqw
+func (e *Encoder) Encode(w io.Writer, df dataframe.Dataframe) (err error) {
+	parqf := parquetwriter.NewWriterFile(w)
+	parqw, err := initCSVWriter(parqf, df)
+	if err != nil {
+		return errors.Wrap(err, "initializing the schema")
 	}
+	defer func() {
+		if serr := parqw.WriteStop(); serr != nil && err == nil {
+			err = serr
+		}
+	}()
+
 	i := df.RowsIterator()
 	s := df.Schema()
 	for i.Next() {
@@ -68,24 +58,9 @@ func (w *parquetWriter) Write(df dataframe.Dataframe) error {
 				d = append(d, cell)
 			}
 		}
-		err := w.parqw.Write(d)
-		if err != nil {
-			return errors.Wrap(err, "error writing a row")
+		if err := parqw.Write(d); err != nil {
+			return errors.Wrap(err, "writing a row")
 		}
-	}
-	return nil
-}
-
-func (w *parquetWriter) Close() error {
-	if w.parqw != nil {
-		err := w.parqw.WriteStop()
-		if err != nil {
-			return errors.Wrap(err, "error closing parquet writer")
-		}
-	}
-	err := w.w.Close()
-	if err != nil {
-		return errors.Wrap(err, "error closing output file")
 	}
 	return nil
 }

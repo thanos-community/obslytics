@@ -4,10 +4,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"math"
+	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -15,12 +14,14 @@ import (
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/thanos-community/obslytics/pkg/input"
-	"github.com/thanos-community/obslytics/pkg/input/storeapi"
-	"github.com/thanos-community/obslytics/pkg/output"
-	"github.com/thanos-community/obslytics/pkg/output/parquet"
+	"github.com/thanos-community/obslytics/pkg/dataframe"
+	"github.com/thanos-community/obslytics/pkg/exporter"
+	"github.com/thanos-community/obslytics/pkg/exporter/parquet"
+	"github.com/thanos-community/obslytics/pkg/series"
+	"github.com/thanos-community/obslytics/pkg/series/promread"
+	"github.com/thanos-community/obslytics/pkg/series/storeapi"
 	"github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/objstore"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -68,15 +69,37 @@ rule_files:
 	return config
 }
 
-func TestThanos_Parquet_e2e(t *testing.T) {
+func exportToParquet(t *testing.T, ctx context.Context, r series.Reader, bkt objstore.Bucket, mint, maxt time.Time, fileName string) {
+	s, err := r.Read(ctx, series.Params{
+		Matchers: []*labels.Matcher{
+			labels.MustNewMatcher(labels.MatchEqual, "__name__", "prometheus_tsdb_head_series"),
+		},
+		MinTime: mint,
+		MaxTime: maxt,
+	})
+	testutil.Ok(t, err)
+
+	df, err := dataframe.FromSeries(s, 3*time.Second, func(o *dataframe.AggrsOptions) {
+		// TODO(inecas): Expose the enabled aggregations via flag.
+		o.Count.Enabled = true
+		o.Sum.Enabled = true
+		o.Min.Enabled = true
+		o.Max.Enabled = true
+	})
+	testutil.Ok(t, err)
+
+	t.Log("Dataframe:", dataframe.ToString(df))
+	testutil.Ok(t, exporter.New(parquet.NewEncoder(), fileName, bkt).Export(ctx, df))
+}
+
+func TestRemoteReadAndThanos_Parquet_e2e(t *testing.T) {
 	t.Parallel()
 
 	s, err := e2e.NewScenario("e2e_test_thanos_parquet")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	now := time.Now()
-
+	mint := time.Now()
 	// TODO(bwplotka): Allow clients to specify image directly via function args.
 	testutil.Ok(t, os.Setenv("THANOS_IMAGE", "quay.io/thanos/thanos:v0.15.0"))
 	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "1", defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
@@ -84,44 +107,55 @@ func TestThanos_Parquet_e2e(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(prom, sidecar))
 
 	testutil.Ok(t, prom.WaitSumMetricsWithOptions(e2e.Greater(512), []string{"prometheus_tsdb_head_samples_appended_total"}, e2e.WaitMissingMetrics))
+	maxt := time.Now()
 
 	logger := log.NewLogfmtLogger(os.Stderr)
-	t.Run("export up metric to parquet file", func(t *testing.T) {
+	bkt := objstore.NewInMemBucket()
+	t.Run("export metric from RemoteRead to parquet file", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
-		api, err := storeapi.NewStoreAPIInput(logger, input.InputConfig{
+		api, err := promread.NewSeries(logger, series.Config{
+			Endpoint:  "http://" + prom.HTTPEndpoint() + "/api/v1/read",
+			TLSConfig: http.TLSConfig{InsecureSkipVerify: true},
+		})
+		testutil.Ok(t, err)
+
+		exportToParquet(t, ctx, api, bkt, mint, maxt, "something/yolo.parquet")
+	})
+	t.Run("export metric from StoreAPI to parquet file", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+
+		api, err := storeapi.NewSeries(logger, series.Config{
 			Endpoint:  sidecar.GRPCEndpoint(),
 			TLSConfig: http.TLSConfig{InsecureSkipVerify: true},
 		})
 		testutil.Ok(t, err)
 
-		b := bytes.Buffer{}
-		testutil.Ok(t, export(
-			ctx,
-			logger,
-			api,
-			input.SeriesParams{
-				Matchers: []*labels.Matcher{
-					labels.MustNewMatcher(labels.MatchEqual, "__name__", "prometheus_tsdb_head_series"),
-				},
-				MinTime: now,
-				MaxTime: timestamp.Time(math.MaxInt64),
-			},
-			3*time.Second,
-			parquet.NewOutput(),
-			output.Params{Out: output.NopWriteCloser(&b)},
-			true,
-		))
-
-		// TODO(bwplotka): Assert properly the actual result, vs what metric actually gives.
-		testutil.Assert(t, 1610 <= b.Len()) // Output varies from 2197 to 1610, debug shows me sometimes two rows, is this expected?
-		/*
-			| instance        job     prometheus  replica  _sample_start  _sample_end  _min_time  _max_time  _count  _sum  _min  _max  |
-			| localhost:9090  myself  test        0        10:30:33       10:30:36     10:30:35   10:30:35   1       0     0     0     |
-			| localhost:9090  myself  test        0        10:30:36       10:30:39     10:30:36   10:30:36   1       377   377   377   |
-		*/
+		exportToParquet(t, ctx, api, bkt, mint, maxt, "something/yolo2.parquet")
 	})
-}
 
-// TODO(bwplotka): Add Prometheus remote read test once remote read input is ready.
+	result, err := bkt.Get(context.Background(), "something/yolo.parquet")
+	testutil.Ok(t, err)
+
+	resultBytes1, err := ioutil.ReadAll(result)
+	testutil.Ok(t, err)
+	testutil.Ok(t, result.Close())
+
+	// TODO(bwplotka): Assert properly the actual result, vs what metric actually gives.
+	testutil.Assert(t, 1610 <= len(resultBytes1)) // Output varies from 2197 to 1610, debug shows me sometimes two rows, is this expected?
+
+	result, err = bkt.Get(context.Background(), "something/yolo2.parquet")
+	testutil.Ok(t, err)
+
+	resultBytes2, err := ioutil.ReadAll(result)
+	testutil.Ok(t, err)
+	testutil.Ok(t, result.Close())
+
+	// TODO(bwplotka): Assert properly the actual result, vs what metric actually gives.
+	testutil.Assert(t, 1610 <= len(resultBytes2)) // Output varies from 2197 to 1610, debug shows me sometimes two rows, is this expected?
+
+	// Data from both StoreAPI and Remote Read should be the same.
+	testutil.Equals(t, resultBytes1, resultBytes2)
+}

@@ -912,8 +912,8 @@ github.com/stretchr/testify v1.5.1 h1:nOGnQDM7FYENwehXlg/kFVnos3rEvtKTjRvOWSzb6H
 github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
 github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd0=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/thanos-io/thanos v0.13.1-0.20200923065955-eebb166c0124 h1:eZ/E0A2GDx4HFATRTeNeZX2vWVx71N3SM0DLg2/npcM=
-github.com/thanos-io/thanos v0.13.1-0.20200923065955-eebb166c0124/go.mod h1:U7HVxfAHYptOk9xCuxr8WoILGL1wWdXVqZD3t6JifNA=
+github.com/thanos-io/thanos v0.13.1-0.20200924085948-49dad93ed672 h1:c4TUOZDNgoPZi8LruOIlyXOclbpqJzlGuuXm1xKD7UQ=
+github.com/thanos-io/thanos v0.13.1-0.20200924085948-49dad93ed672/go.mod h1:U7HVxfAHYptOk9xCuxr8WoILGL1wWdXVqZD3t6JifNA=
 github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab h1:7ZR3hmisBWw77ZpO1/o86g+JV3VKlk3d48jopJxzTjU=
 github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab/go.mod h1:eheTFp954zcWZXCU8d0AT76ftsQOTo4DTqkN/h3k1MY=
 github.com/tidwall/pretty v0.0.0-20180105212114-65a9db5fad51/go.mod h1:XNkn88O1ChpSDQmQeStsy+sBenx6DDtFZJxhVysOjyk=

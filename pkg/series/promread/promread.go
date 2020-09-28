@@ -3,6 +3,7 @@ package promread
 import (
 	"context"
 	"net/url"
+	"path"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -11,21 +12,20 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/thanos-community/obslytics/pkg/input"
+	"github.com/thanos-community/obslytics/pkg/series"
 	"github.com/thanos-community/obslytics/pkg/version"
-
-	"time"
 )
 
-type promReadInput struct {
+type Series struct {
 	logger log.Logger
-	conf   input.InputConfig
+	conf   series.Config
 }
 
-func NewRemoteReadInput(logger log.Logger, conf input.InputConfig) (promReadInput, error) {
-	return promReadInput{logger: logger, conf: conf}, nil
+func NewSeries(logger log.Logger, conf series.Config) (Series, error) {
+	return Series{logger: logger, conf: conf}, nil
 }
 
 // TranslatePromMatchers returns proto matchers (prompb) from Prometheus matchers.
@@ -52,8 +52,7 @@ func TranslatePromMatchers(ms ...*labels.Matcher) ([]*prompb.LabelMatcher, error
 	return res, nil
 }
 
-func (i promReadInput) Open(ctx context.Context, params input.SeriesParams) (input.SeriesIterator, error) {
-
+func (i Series) Read(ctx context.Context, params series.Params) (series.Set, error) {
 	tlsConfig := config_util.TLSConfig{
 		CAFile:             i.conf.TLSConfig.CAFile,
 		CertFile:           i.conf.TLSConfig.CertFile,
@@ -81,7 +80,7 @@ func (i promReadInput) Open(ctx context.Context, params input.SeriesParams) (inp
 		HTTPClientConfig: httpConfig,
 	}
 
-	client, err := remote.NewReadClient("Obslytics/"+version.Version, clientConfig)
+	client, err := remote.NewReadClient(path.Join("obslytics", version.Version), clientConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +111,7 @@ func (i promReadInput) Open(ctx context.Context, params input.SeriesParams) (inp
 		})
 	}
 
-	return &readSeriesIterator{
-		logger:             i.logger,
+	return &iterator{
 		ctx:                ctx,
 		client:             client,
 		seriesList:         readSeriesList,
@@ -121,17 +119,15 @@ func (i promReadInput) Open(ctx context.Context, params input.SeriesParams) (inp
 	}, nil
 }
 
-// readSeriesIterator implements input.SeriesIterator.
-type readSeriesIterator struct {
-	logger             log.Logger
+// iterator implements input.Set.
+type iterator struct {
 	ctx                context.Context
 	client             remote.ReadClient
 	seriesList         []ReadSeries
 	currentSeriesIndex int
 }
 
-func (i *readSeriesIterator) Next() bool {
-
+func (i *iterator) Next() bool {
 	// Return false if the last index is already reached.
 	if i.currentSeriesIndex+1 > len(i.seriesList)-1 {
 		return false
@@ -141,22 +137,20 @@ func (i *readSeriesIterator) Next() bool {
 
 }
 
-func (i *readSeriesIterator) At() input.Series {
+func (i *iterator) At() storage.Series {
 	return i.seriesList[i.currentSeriesIndex]
 }
 
-func (i *readSeriesIterator) Close() error {
-	return nil
-}
+func (i *iterator) Warnings() storage.Warnings { return nil }
+func (i *iterator) Err() error                 { return nil }
+func (i *iterator) Close() error               { return nil }
 
-// ReadSeries implements input.Series.
+// ReadSeries implements storage.Series.
 type ReadSeries struct {
-	input.Series
 	timeseries prompb.TimeSeries
 }
 
 func (r ReadSeries) Labels() labels.Labels {
-
 	var labelList []labels.Label
 	for i := range r.timeseries.Labels {
 		labelList = append(labelList, labels.Label{
@@ -168,26 +162,17 @@ func (r ReadSeries) Labels() labels.Labels {
 	return labels.New(labelList...)
 }
 
-func (r ReadSeries) MinTime() time.Time {
-	return timestamp.Time(r.timeseries.Samples[0].Timestamp)
+func (r ReadSeries) Iterator() chunkenc.Iterator {
+	return readChunk{series: r.timeseries}.Iterator()
 }
 
-func (r ReadSeries) ChunkIterator() (input.ChunkIterator, error) {
-	chunk := ReadChunk{
-		series: r.timeseries,
-	}
-	iterator := chunk.Iterator()
-	return iterator, nil
-}
-
-// ReadChunkIterator implements input.ChunkIterator.
-type ReadChunkIterator struct {
-	input.ChunkIterator
-	Chunk              ReadChunk
+// readChunkIterator implements input.ChunkIterator.
+type readChunkIterator struct {
+	Chunk              readChunk
 	currentSampleIndex int
 }
 
-func (c *ReadChunkIterator) Next() bool {
+func (c *readChunkIterator) Next() bool {
 	// Return false if the last index is reached.
 	if c.currentSampleIndex+1 > len(c.Chunk.series.Samples)-1 {
 		return false
@@ -199,8 +184,8 @@ func (c *ReadChunkIterator) Next() bool {
 // Seek advances the iterator forward to the first sample with the timestamp equal or greater than t.
 // If current sample found by previous `Next` or `Seek` operation already has this property, Seek has no effect.
 // Seek returns true, if such sample exists, false otherwise.
-// Iterator is exhausted when the Seek returns false.
-func (c *ReadChunkIterator) Seek(t int64) bool {
+// Set is exhausted when the Seek returns false.
+func (c *readChunkIterator) Seek(t int64) bool {
 	if c.currentSampleIndex < 0 {
 		c.currentSampleIndex = 0
 	}
@@ -214,21 +199,21 @@ func (c *ReadChunkIterator) Seek(t int64) bool {
 
 // At returns the current timestamp/value pair.
 // Before the iterator has advanced At behavior is unspecified.
-func (c *ReadChunkIterator) At() (int64, float64) {
+func (c *readChunkIterator) At() (int64, float64) {
 	return c.Chunk.series.Samples[c.currentSampleIndex].Timestamp, c.Chunk.series.Samples[c.currentSampleIndex].Value
 }
 
 // Err returns the current error. It should be used only after iterator is
 // exhausted, that is `Next` or `Seek` returns false.
-func (c *ReadChunkIterator) Err() error {
+func (c *readChunkIterator) Err() error {
 	return nil
 }
 
-type ReadChunk struct {
+type readChunk struct {
 	chunkenc.Chunk
 	series prompb.TimeSeries
 }
 
-func (c ReadChunk) Iterator() input.ChunkIterator {
-	return &ReadChunkIterator{Chunk: c, currentSampleIndex: -1}
+func (c readChunk) Iterator() chunkenc.Iterator {
+	return &readChunkIterator{Chunk: c, currentSampleIndex: -1}
 }
