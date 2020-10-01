@@ -4,15 +4,16 @@ import (
 	"context"
 	"io"
 
+	"github.com/thanos-io/thanos/pkg/tls"
+	"google.golang.org/grpc/credentials"
+
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-community/obslytics/pkg/series"
-	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	tracing "github.com/thanos-io/thanos/pkg/tracing/client"
 	"google.golang.org/grpc"
 )
 
@@ -27,16 +28,15 @@ func NewSeries(logger log.Logger, conf series.Config) (Series, error) {
 }
 
 func (i Series) Read(ctx context.Context, params series.Params) (series.Set, error) {
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(i.logger, nil, tracing.NoopTracer(),
-		!i.conf.TLSConfig.InsecureSkipVerify,
-		i.conf.TLSConfig.CertFile,
-		i.conf.TLSConfig.KeyFile,
-		i.conf.TLSConfig.CAFile,
-		i.conf.Endpoint)
 
+	tlsCfg, err := tls.NewClientConfig(i.logger, i.conf.TLSConfig.CertFile, i.conf.TLSConfig.KeyFile, i.conf.TLSConfig.CAFile, i.conf.Endpoint)
 	if err != nil {
 		return nil, errors.Wrap(err, "error initializing GRPC options")
 	}
+	tlsCfg.InsecureSkipVerify = i.conf.TLSConfig.InsecureSkipVerify
+
+	var dialOpts []grpc.DialOption
+	dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 
 	conn, err := grpc.DialContext(ctx, i.conf.Endpoint, dialOpts...)
 	if err != nil {
