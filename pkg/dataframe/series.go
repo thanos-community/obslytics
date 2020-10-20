@@ -215,10 +215,14 @@ func (a *seriesAggregator) getLabelNames() []string {
 		ls  labels.Labels
 		ret []string
 	)
+	// Create a union set (map) of all the label names.
+	lsMap := make(map[string]string)
 	for _, s := range a.df.seriesRecordSets {
-		ls = s.Labels
-		break
+		for labelName, labelValue := range s.Labels.Map() {
+			lsMap[labelName] = labelValue
+		}
 	}
+	ls = labels.FromMap(lsMap)
 
 	for _, l := range ls {
 		if l.Name == "__name__" {
