@@ -27,8 +27,13 @@ func NewSeries(logger log.Logger, conf series.Config) (Series, error) {
 }
 
 func (i Series) Read(ctx context.Context, params series.Params) (series.Set, error) {
+	// set as true for authenticated connection if cert, key and/or ca are defined.
+	secure := (i.conf.TLSConfig.CertFile != "" ||
+		   i.conf.TLSConfig.KeyFile != "" ||
+		   i.conf.TLSConfig.CAFile != "")
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(i.logger, nil, tracing.NoopTracer(),
-		!i.conf.TLSConfig.InsecureSkipVerify,
+		secure,
+		i.conf.TLSConfig.InsecureSkipVerify,
 		i.conf.TLSConfig.CertFile,
 		i.conf.TLSConfig.KeyFile,
 		i.conf.TLSConfig.CAFile,
@@ -43,7 +48,7 @@ func (i Series) Read(ctx context.Context, params series.Params) (series.Set, err
 		return nil, errors.Wrap(err, "error initializing GRPC dial context")
 	}
 
-	matchers, err := storepb.TranslatePromMatchers(params.Matchers...)
+	matchers, err := storepb.PromMatchersToMatchers(params.Matchers...)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +102,7 @@ func (i *iterator) Next() bool {
 func (i *iterator) At() storage.Series {
 	// We support only raw data for now.
 	return newChunkSeries(
-		labelpb.LabelsToPromLabels(i.currentSeries.Labels),
+		labelpb.ZLabelsToPromLabels(i.currentSeries.Labels),
 		i.currentSeries.Chunks,
 		i.mint, i.maxt,
 		[]storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM},
