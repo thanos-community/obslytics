@@ -18,7 +18,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/alecthomas/kingpin.v2"
 
-	exportertfactory "github.com/thanos-community/obslytics/pkg/exporter/factory"
+	exporterfactory "github.com/thanos-community/obslytics/pkg/exporter/factory"
 	infactory "github.com/thanos-community/obslytics/pkg/series/factory"
 )
 
@@ -62,7 +62,7 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				return err
 			}
 
-			exp, err := exportertfactory.NewExporter(logger, outputCfg)
+			exp, err := exporterfactory.NewExporter(logger, outputCfg)
 			if err != nil {
 				return err
 			}
