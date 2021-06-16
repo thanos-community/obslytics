@@ -3,16 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql/parser"
-	"github.com/thanos-community/obslytics/pkg/dataframe"
-	"github.com/thanos-community/obslytics/pkg/series"
 	"github.com/thanos-io/thanos/pkg/model"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -67,31 +63,7 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				return err
 			}
 
-			ser, err := in.Read(ctx, series.Params{
-				Matchers: matchers,
-				MinTime:  timestamp.Time(mint.PrometheusTimestamp()),
-				MaxTime:  timestamp.Time(maxt.PrometheusTimestamp()),
-			})
-			if err != nil {
-				return err
-			}
-
-			df, err := dataframe.FromSeries(ser, *resolution, func(o *dataframe.AggrsOptions) {
-				// TODO(inecas): Expose the enabled aggregations via flag.
-				o.Count.Enabled = true
-				o.Sum.Enabled = true
-				o.Min.Enabled = true
-				o.Max.Enabled = true
-			})
-			if err != nil {
-				return errors.Wrap(err, "dataframe creation")
-			}
-
-			if *dbgOut {
-				dataframe.Print(os.Stdout, df)
-			}
-
-			if err := exp.Export(ctx, df); err != nil {
+			if err := exp.ExportStream(ctx, in, matchers, mint, maxt, *resolution, *dbgOut, 4); err != nil {
 				return errors.Wrapf(err, "export dataframe")
 			}
 			return nil
