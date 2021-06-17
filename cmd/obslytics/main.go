@@ -22,6 +22,8 @@ const (
 	logFormatJson   = "json"
 )
 
+// Problem: 12GB for one metrics 30m retention.
+
 type setupFunc func(*run.Group, log.Logger) error
 
 func main() {

@@ -3,6 +3,7 @@ package parquet
 import (
 	"fmt"
 	"io"
+	"runtime"
 	"time"
 
 	"github.com/pkg/errors"
@@ -61,6 +62,7 @@ func (e *Encoder) Encode(w io.Writer, df dataframe.Dataframe) (err error) {
 		if err := parqw.Write(d); err != nil {
 			return errors.Wrap(err, "writing a row")
 		}
+		runtime.GC() // Force GC run to clean memory.
 	}
 	return nil
 }

@@ -28,16 +28,18 @@ func NewSeries(logger log.Logger, conf series.Config) (Series, error) {
 
 func (i Series) Read(ctx context.Context, params series.Params) (series.Set, error) {
 	// set as true for authenticated connection if cert, key and/or ca are defined.
-	secure := (i.conf.TLSConfig.CertFile != "" ||
-		   i.conf.TLSConfig.KeyFile != "" ||
-		   i.conf.TLSConfig.CAFile != "")
+	secure := i.conf.TLSConfig.CertFile != "" ||
+		i.conf.TLSConfig.KeyFile != "" ||
+		i.conf.TLSConfig.CAFile != ""
+
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(i.logger, nil, tracing.NoopTracer(),
 		secure,
 		i.conf.TLSConfig.InsecureSkipVerify,
 		i.conf.TLSConfig.CertFile,
 		i.conf.TLSConfig.KeyFile,
 		i.conf.TLSConfig.CAFile,
-		i.conf.Endpoint)
+		i.conf.Endpoint,
+	)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "error initializing GRPC options")
@@ -63,6 +65,9 @@ func (i Series) Read(ctx context.Context, params series.Params) (series.Set, err
 	if err != nil {
 		return nil, errors.Wrapf(err, "storepb.Series against %v", i.conf.Endpoint)
 	}
+
+	// NOTE: If this would be not streaming, at this point you would have been allocated ALL chunks and labels withing
+	// this response.
 
 	return &iterator{
 		ctx:    ctx,
@@ -100,6 +105,10 @@ func (i *iterator) Next() bool {
 }
 
 func (i *iterator) At() storage.Series {
+	// Tricky, but if you don't COPY labels here, we always keep the memory for all chunks within
+	// this single response too, so we need to copy the labels with.
+	labelpb.ReAllocZLabelsStrings(&i.currentSeries.Labels)
+
 	// We support only raw data for now.
 	return newChunkSeries(
 		labelpb.ZLabelsToPromLabels(i.currentSeries.Labels),

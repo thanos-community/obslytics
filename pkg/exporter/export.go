@@ -53,7 +53,7 @@ func New(c Encoder, path string, bkt objstore.Bucket) *Exporter {
 // Export encodes and streams the dataframe to given bucket. On error partial result might occur.
 // It's caller responsibility to clean after error.
 func (e *Exporter) Export(ctx context.Context, df dataframe.Dataframe) (err error) {
-
+	// TODO(bwplotka): How large buffer is?
 	r, w := io.Pipe()
 
 	errch := make(chan error, 1)

@@ -76,7 +76,7 @@ type seriesAggregator struct {
 	options    AggrsOptions
 }
 
-// IteratorFromSeries returns iterator that produce dataframe for every series.
+// FromSeries returns iterator that produce dataframe for every series.
 // TODO(bwplotka): Dataframe allows us to do bit more streaming approach. Consider this.
 func FromSeries(r series.Set, resolution time.Duration, opts ...AggrOptionFunc) (Dataframe, error) {
 	defer r.Close()
@@ -90,6 +90,8 @@ func FromSeries(r series.Set, resolution time.Duration, opts ...AggrOptionFunc) 
 
 	var activeSeries *aggregatedSeries
 	var currentHash uint64
+
+	// r.Next()
 	for r.Next() {
 		s := r.At()
 		ls := s.Labels()
