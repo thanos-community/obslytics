@@ -18,7 +18,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/alecthomas/kingpin.v2"
 
-	exportertfactory "github.com/thanos-community/obslytics/pkg/exporter/factory"
+	exporterfactory "github.com/thanos-community/obslytics/pkg/exporter/factory"
 	infactory "github.com/thanos-community/obslytics/pkg/series/factory"
 )
 
@@ -62,10 +62,70 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				return err
 			}
 
-			exp, err := exportertfactory.NewExporter(logger, outputCfg)
+			exp, err := exporterfactory.NewExporter(logger, outputCfg)
 			if err != nil {
 				return err
 			}
+
+			/**
+			readPipe, writePipe := io.Pipe()
+			errch := make(chan error, 1)
+			go func() {
+				// TODO(bwplotka): Log error from close (e.g using runutil.Close... package).
+				defer writePipe.Close()
+
+				chunkStart := minTime.PrometheusTimestamp()
+				chunkSize := (maxTime.PrometheusTimestamp() - chunkStart) / int64(chunks)
+
+				for i := 0; i < chunks; i++ {
+					ser, err := in.Read(ctx, series.Params{
+						Matchers: matchers,
+						MinTime:  timestamp.Time(chunkStart),
+						MaxTime:  timestamp.Time(chunkStart + chunkSize),
+					})
+					chunkStart += chunkSize
+
+					if err != nil {
+						errch <- err
+						return
+					}
+
+					df, err := dataframe.FromSeries(ser, resolution, func(o *dataframe.AggrsOptions) {
+						o.Count.Enabled = false
+						o.Sum.Enabled = false
+						o.Min.Enabled = false
+						o.Max.Enabled = false
+					})
+
+					if err != nil {
+						errch <- errors.Wrap(err, "dataframe creation")
+						return
+					}
+
+					if dbgOut {
+						dataframe.Print(os.Stdout, df)
+					}
+
+					if err := e.enc.Encode(writePipe, df); err != nil {
+						errch <- errors.Wrap(err, "encode")
+						return
+					}
+
+				}
+				errch <- nil
+			}()
+			defer func() {
+				// TODO(bwplotka): Log error from close (e.g using runutil.Close... package).
+				_ = readPipe.Close()
+				if cerr := <-errch; cerr != nil && err == nil {
+					err = cerr
+				}
+			}()
+
+			if err := e.bkt.Upload(ctx, e.path, readPipe); err != nil {
+				return errors.Wrap(err, "upload")
+			}
+			*/
 
 			ser, err := in.Read(ctx, series.Params{
 				Matchers: matchers,
@@ -76,6 +136,12 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				return err
 			}
 
+			// ~0 allocs: We are streaming series by series for the given duration (series have sorted label).
+
+			// TODO:
+			// * Our dataframe interface streams row by row (by series).
+			//   * Q: Is implementation really using this, or are we holding memory/not flushing on every iteration?
+			//   * Q: Maybe Implementation is fine, but the caller /exporter gather everytrhing (all rows) in memory.
 			df, err := dataframe.FromSeries(ser, *resolution, func(o *dataframe.AggrsOptions) {
 				// TODO(inecas): Expose the enabled aggregations via flag.
 				o.Count.Enabled = true
@@ -94,7 +160,11 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 			if err := exp.Export(ctx, df); err != nil {
 				return errors.Wrapf(err, "export dataframe")
 			}
-			return nil
+
+			//if err := exp.ExportStream(ctx, in, matchers, mint, maxt, *resolution, *dbgOut, 4); err != nil {
+			//	return errors.Wrapf(err, "export dataframe")
+			//}
+			//return nil
 		}, func(error) { cancel() })
 		return nil
 	}
