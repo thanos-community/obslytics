@@ -25,7 +25,7 @@ type Config struct {
 
 // An Encoder writes serialized type to an output stream.
 type Encoder interface {
-	// TODO(bwplotka): Consider more generic option with interface{} if we have more types than Dataframe
+	// TODO(bwplotka): Consider more generic option with interface{} if we have more types than Dataframe.
 	Encode(io.Writer, dataframe.Dataframe) (err error)
 }
 
