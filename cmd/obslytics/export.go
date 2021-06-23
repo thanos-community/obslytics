@@ -12,8 +12,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-community/obslytics/pkg/dataframe"
+	"github.com/thanos-community/obslytics/pkg/exporter"
 	"github.com/thanos-community/obslytics/pkg/series"
 	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -49,24 +52,46 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 				return err
 			}
 
+			inputConfig := series.Config{}
+			if err := yaml.UnmarshalStrict(inputCfg, &inputConfig); err != nil {
+				return err
+			}
+
 			outputCfg, err := outputFlag.Content()
 			if err != nil {
 				return err
 			}
 
-			return export(ctx, logger, *matchersStr, inputCfg, outputCfg, mint, maxt, *resolution, *dbgOut)
+			outputConfig := exporter.Config{
+				// Default Storage Type is Filesystem.
+				Storage: client.BucketConfig{Type: client.FILESYSTEM},
+			}
+			if err := yaml.UnmarshalStrict(outputCfg, &outputConfig); err != nil {
+				return err
+			}
+
+			return export(ctx, logger, *matchersStr, inputConfig, outputConfig, mint, maxt, *resolution, *dbgOut)
 		}, func(error) { cancel() })
 		return nil
 	}
 }
 
-func export(ctx context.Context, logger log.Logger, matchersStr string, inputCfg, outputCfg []byte, mint, maxt model.TimeOrDurationValue, resolution time.Duration, printDebug bool) error {
+func export(
+	ctx context.Context,
+	logger log.Logger,
+	matchersStr string,
+	inputConfig series.Config,
+	outputCfg exporter.Config,
+	mint, maxt model.TimeOrDurationValue,
+	resolution time.Duration,
+	printDebug bool,
+) error {
 	matchers, err := parser.ParseMetricSelector(matchersStr)
 	if err != nil {
 		return errors.Wrap(err, "parsing provided matchers")
 	}
 
-	in, err := infactory.NewSeriesReader(logger, inputCfg)
+	in, err := infactory.NewSeriesReader(logger, inputConfig)
 	if err != nil {
 		return err
 	}

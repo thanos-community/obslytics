@@ -8,16 +8,10 @@ import (
 	"github.com/thanos-community/obslytics/pkg/series"
 	"github.com/thanos-community/obslytics/pkg/series/promread"
 	"github.com/thanos-community/obslytics/pkg/series/storeapi"
-	"gopkg.in/yaml.v2"
 )
 
 // NewSeriesReader creates series.Reader based on configuration file.
-func NewSeriesReader(logger log.Logger, confYaml []byte) (series.Reader, error) {
-	cfg := series.Config{}
-	if err := yaml.UnmarshalStrict(confYaml, &cfg); err != nil {
-		return nil, err
-	}
-
+func NewSeriesReader(logger log.Logger, cfg series.Config) (series.Reader, error) {
 	switch series.Type(strings.ToUpper(string(cfg.Type))) {
 	case series.REMOTEREAD:
 		return promread.NewSeries(logger, cfg)
