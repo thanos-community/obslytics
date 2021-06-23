@@ -44,58 +44,64 @@ func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 	m["export"] = func(g *run.Group, logger log.Logger) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			matchers, err := parser.ParseMetricSelector(*matchersStr)
-			if err != nil {
-				return errors.Wrap(err, "parsing provided matchers")
-			}
-
 			inputCfg, err := inputFlag.Content()
 			if err != nil {
 				return err
 			}
-			in, err := infactory.NewSeriesReader(logger, inputCfg)
-			if err != nil {
-				return err
-			}
+
 			outputCfg, err := outputFlag.Content()
 			if err != nil {
 				return err
 			}
 
-			exp, err := exportertfactory.NewExporter(logger, outputCfg)
-			if err != nil {
-				return err
-			}
-
-			ser, err := in.Read(ctx, series.Params{
-				Matchers: matchers,
-				MinTime:  timestamp.Time(mint.PrometheusTimestamp()),
-				MaxTime:  timestamp.Time(maxt.PrometheusTimestamp()),
-			})
-			if err != nil {
-				return err
-			}
-
-			df, err := dataframe.FromSeries(ser, *resolution, func(o *dataframe.AggrsOptions) {
-				// TODO(inecas): Expose the enabled aggregations via flag.
-				o.Count.Enabled = true
-				o.Sum.Enabled = true
-				o.Min.Enabled = true
-				o.Max.Enabled = true
-			})
-			if err != nil {
-				return errors.Wrap(err, "dataframe creation")
-			}
-
-			if *dbgOut {
-				dataframe.Print(os.Stdout, df)
-			}
-
-			if err := exp.Export(ctx, df); err != nil {
-				return errors.Wrapf(err, "export dataframe")
-			}
-			return nil
+			return export(ctx, logger, *matchersStr, inputCfg, outputCfg, mint, maxt, *resolution, *dbgOut)
 		}, func(error) { cancel() })
 		return nil
 	}
+}
+
+func export(ctx context.Context, logger log.Logger, matchersStr string, inputCfg, outputCfg []byte, mint, maxt model.TimeOrDurationValue, resolution time.Duration, printDebug bool) error {
+	matchers, err := parser.ParseMetricSelector(matchersStr)
+	if err != nil {
+		return errors.Wrap(err, "parsing provided matchers")
+	}
+
+	in, err := infactory.NewSeriesReader(logger, inputCfg)
+	if err != nil {
+		return err
+	}
+
+	exp, err := exportertfactory.NewExporter(logger, outputCfg)
+	if err != nil {
+		return err
+	}
+
+	ser, err := in.Read(ctx, series.Params{
+		Matchers: matchers,
+		MinTime:  timestamp.Time(mint.PrometheusTimestamp()),
+		MaxTime:  timestamp.Time(maxt.PrometheusTimestamp()),
+	})
+	if err != nil {
+		return err
+	}
+
+	df, err := dataframe.FromSeries(ser, resolution, func(o *dataframe.AggrsOptions) {
+		// TODO(inecas): Expose the enabled aggregations via flag.
+		o.Count.Enabled = true
+		o.Sum.Enabled = true
+		o.Min.Enabled = true
+		o.Max.Enabled = true
+	})
+	if err != nil {
+		return errors.Wrap(err, "dataframe creation")
+	}
+
+	if printDebug {
+		dataframe.Print(os.Stdout, df)
+	}
+
+	if err := exp.Export(ctx, df); err != nil {
+		return errors.Wrapf(err, "export dataframe")
+	}
+	return nil
 }
