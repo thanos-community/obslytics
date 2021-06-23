@@ -29,8 +29,8 @@ func NewSeries(logger log.Logger, conf series.Config) (Series, error) {
 func (i Series) Read(ctx context.Context, params series.Params) (series.Set, error) {
 	// set as true for authenticated connection if cert, key and/or ca are defined.
 	secure := (i.conf.TLSConfig.CertFile != "" ||
-		   i.conf.TLSConfig.KeyFile != "" ||
-		   i.conf.TLSConfig.CAFile != "")
+		i.conf.TLSConfig.KeyFile != "" ||
+		i.conf.TLSConfig.CAFile != "")
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(i.logger, nil, tracing.NoopTracer(),
 		secure,
 		i.conf.TLSConfig.InsecureSkipVerify,
