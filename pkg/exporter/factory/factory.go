@@ -14,15 +14,7 @@ import (
 )
 
 // NewExporter returns exporter based on configuration file.
-func NewExporter(logger log.Logger, confYaml []byte) (*exporter.Exporter, error) {
-	cfg := exporter.Config{
-		// Default Storage Type is Filesystem.
-		Storage: client.BucketConfig{Type: client.FILESYSTEM},
-	}
-	if err := yaml.UnmarshalStrict(confYaml, &cfg); err != nil {
-		return nil, err
-	}
-
+func NewExporter(logger log.Logger, cfg exporter.Config) (*exporter.Exporter, error) {
 	storageConf, err := yaml.Marshal(cfg.Storage)
 	if err != nil {
 		return nil, errors.Wrap(err, "storage configuration")
