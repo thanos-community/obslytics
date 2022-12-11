@@ -1,9 +1,11 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package main
 
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -11,18 +13,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/efficientgo/core/testutil"
+	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/thanos-community/obslytics/pkg/exporter"
-	"github.com/thanos-community/obslytics/pkg/series"
+	"github.com/thanos-io/objstore/client"
+	"github.com/thanos-io/objstore/providers/filesystem"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
-	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
+
+	"github.com/thanos-community/obslytics/pkg/exporter"
+	"github.com/thanos-community/obslytics/pkg/series"
 )
 
 func BenchmarkExport(b *testing.B) {
@@ -74,7 +77,7 @@ func BenchmarkExport(b *testing.B) {
 }
 
 func benchExport(b *testing.B, resp []*storepb.SeriesResponse) {
-	tmpDir, err := ioutil.TempDir("", "export-bench")
+	tmpDir, err := os.MkdirTemp("", "export-bench")
 	testutil.Ok(b, err)
 	defer testutil.Ok(b, os.RemoveAll(tmpDir))
 

@@ -1,13 +1,17 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package dataframe
 
 import (
 	"sort"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/efficientgo/core/errors"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-community/obslytics/pkg/series"
 )
 
@@ -153,7 +157,7 @@ func (a *seriesAggregator) ingestSamples(as *aggregatedSeries, i chunkenc.Iterat
 		ts, v = i.At()
 		t = timestamp.Time(ts)
 		if t.Before(as.sampleStart) {
-			return errors.Errorf("Chunk timestamp %s is less than the sampleStart %s", t, as.sampleStart)
+			return errors.Newf("Chunk timestamp %s is less than the sampleStart %s", t, as.sampleStart)
 		}
 		if t.After(as.sampleEnd) {
 			as = a.finalizeSample(as, t)
@@ -166,7 +170,7 @@ func (a *seriesAggregator) ingestSamples(as *aggregatedSeries, i chunkenc.Iterat
 			as.max = v
 		}
 		if as.maxTime.After(t) {
-			return errors.Errorf("Incoming chunks are not sorted by timestamp: expected %s after %s", t, as.maxTime)
+			return errors.Newf("Incoming chunks are not sorted by timestamp: expected %s after %s", t, as.maxTime)
 		}
 		as.maxTime = t
 		as.count += 1

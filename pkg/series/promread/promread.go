@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package promread
 
 import (
@@ -5,16 +8,17 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/go-kit/kit/log"
-	"github.com/pkg/errors"
+	"github.com/efficientgo/core/errors"
+	"github.com/go-kit/log"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-community/obslytics/pkg/series"
 	"github.com/thanos-community/obslytics/pkg/version"
 )
@@ -45,7 +49,7 @@ func TranslatePromMatchers(ms ...*labels.Matcher) ([]*prompb.LabelMatcher, error
 		case labels.MatchNotRegexp:
 			t = prompb.LabelMatcher_NRE
 		default:
-			return nil, errors.Errorf("unrecognized matcher type %d", m.Type)
+			return nil, errors.Newf("unrecognized matcher type %d", m.Type)
 		}
 		res = append(res, &prompb.LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
 	}

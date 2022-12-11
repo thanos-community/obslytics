@@ -1,13 +1,17 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package exporter
 
 import (
 	"context"
 	"io"
 
-	"github.com/pkg/errors"
+	"github.com/efficientgo/core/errors"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
+
 	"github.com/thanos-community/obslytics/pkg/dataframe"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
 )
 
 type Type string

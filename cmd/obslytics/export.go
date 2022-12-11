@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package main
 
 import (
@@ -6,19 +9,20 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/efficientgo/core/errors"
+	"github.com/go-kit/log"
 	"github.com/oklog/run"
-	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/thanos-io/objstore/client"
+	"github.com/thanos-io/thanos/pkg/model"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-community/obslytics/pkg/dataframe"
 	"github.com/thanos-community/obslytics/pkg/exporter"
 	"github.com/thanos-community/obslytics/pkg/series"
-	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
-	"gopkg.in/yaml.v2"
 
-	"github.com/thanos-io/thanos/pkg/extflag"
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	exportertfactory "github.com/thanos-community/obslytics/pkg/exporter/factory"
@@ -27,8 +31,8 @@ import (
 
 func registerExport(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command("export", "Export observability series data into popular analytics formats.")
-	inputFlag := extflag.RegisterPathOrContent(cmd, "input-config", "YAML for input, series configuration.", true)
-	outputFlag := extflag.RegisterPathOrContent(cmd, "output-config", "YAML for dataframe export configuration.", false)
+	inputFlag := extflag.RegisterPathOrContent(cmd, "input-config", "YAML for input, series configuration.", extflag.WithRequired())
+	outputFlag := extflag.RegisterPathOrContent(cmd, "output-config", "YAML for dataframe export configuration.")
 
 	// TODO(bwplotka): Describe more how the format looks like.
 	matchersStr := cmd.Flag("match", "Metric matcher for metrics to export (e.g up{a=\"1\"}").Required().String()

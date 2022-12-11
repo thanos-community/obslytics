@@ -1,12 +1,15 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package series
 
 import (
 	"context"
 	"time"
 
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
-	http_util "github.com/thanos-io/thanos/pkg/http"
+	http_util "github.com/thanos-io/thanos/pkg/exthttp"
 )
 
 type Type string
