@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"testing"
 	"time"
 
@@ -69,6 +70,8 @@ func TestRemoteReadInput_Open(t *testing.T) {
 	e, err := e2e.NewDockerEnvironment("remote-read")
 	testutil.Ok(t, err)
 	t.Cleanup(e.Close)
+
+	testutil.Ok(t, os.Setenv("THANOS_IMAGE", "quay.io/thanos/thanos:v0.29.0"))
 
 	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", defaultPromConfig("test", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))

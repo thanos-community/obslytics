@@ -106,6 +106,7 @@ func TestRemoteReadAndThanos_Parquet_e2e(t *testing.T) {
 	t.Cleanup(e.Close)
 
 	mint := time.Now()
+	testutil.Ok(t, os.Setenv("THANOS_IMAGE", "quay.io/thanos/thanos:v0.29.0"))
 
 	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", defaultPromConfig("test", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
