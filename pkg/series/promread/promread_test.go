@@ -1,19 +1,25 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package promread
 
 import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/thanos-community/obslytics/pkg/series"
-	http_util "github.com/thanos-io/thanos/pkg/http"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
+	"github.com/efficientgo/e2e"
+	e2emon "github.com/efficientgo/e2e/monitoring"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/timestamp"
+	http_util "github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
+
+	"github.com/thanos-community/obslytics/pkg/series"
 )
 
 // defaultPromConfig returns Prometheus config that sets Prometheus to:
@@ -61,22 +67,23 @@ rule_files:
 func TestRemoteReadInput_Open(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("unit_test_remoteread")
+	e, err := e2e.NewDockerEnvironment("remote-read")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e.Close)
 
-	prom, _, err := e2ethanos.NewPrometheus(s.SharedDir(), s.NetworkName(), defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(prom))
+	testutil.Ok(t, os.Setenv("THANOS_IMAGE", "quay.io/thanos/thanos:v0.29.0"))
 
-	testutil.Ok(t, prom.WaitSumMetricsWithOptions(e2e.Greater(512), []string{"prometheus_tsdb_head_samples_appended_total"}, e2e.WaitMissingMetrics))
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", defaultPromConfig("test", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	testutil.Ok(t, prom.WaitSumMetricsWithOptions(e2emon.Greater(512), []string{"prometheus_tsdb_head_samples_appended_total"}, e2emon.WaitMissingMetrics()))
 
 	t.Run("test remote read input", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
 		inConfig := series.Config{
-			Endpoint: "http://" + prom.HTTPEndpoint() + "/api/v1/read",
+			Endpoint: "http://" + prom.Endpoint("http") + "/api/v1/read",
 			TLSConfig: http_util.TLSConfig{
 				InsecureSkipVerify: true,
 			},
@@ -105,7 +112,7 @@ func TestRemoteReadInput_Open(t *testing.T) {
 		currentSeriesChunkIter := currentSeries.Iterator()
 
 		// Test for "__name__" label value.
-		testutil.Assert(t, "prometheus_tsdb_head_series" == currentSeries.Labels().Get("__name__"))
+		testutil.Assert(t, currentSeries.Labels().Get("__name__") == "prometheus_tsdb_head_series")
 
 		// Go to the first sample.
 		testutil.Assert(t, currentSeriesChunkIter.Next() == true)

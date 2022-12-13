@@ -1,8 +1,11 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package storeapi
 
 import (
-	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/efficientgo/core/errors"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -64,13 +67,13 @@ func (s *chunkSeries) Iterator() chunkenc.Iterator {
 			}
 			sit = downsample.NewApplyCounterResetsIterator(its...)
 		default:
-			return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
+			return errSeriesIterator{err: errors.Newf("unexpected result aggregate type %v", s.aggrs)}
 		}
 		return newBoundedSeriesIterator(sit, s.mint, s.maxt)
 	}
 
 	if len(s.aggrs) != 2 {
-		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
+		return errSeriesIterator{err: errors.Newf("unexpected result aggregate type %v", s.aggrs)}
 	}
 
 	switch {
@@ -87,7 +90,7 @@ func (s *chunkSeries) Iterator() chunkenc.Iterator {
 		}
 		sit = newChunkSeriesIterator(its)
 	default:
-		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
+		return errSeriesIterator{err: errors.Newf("unexpected result aggregate type %v", s.aggrs)}
 	}
 	return newBoundedSeriesIterator(sit, s.mint, s.maxt)
 }
@@ -179,7 +182,7 @@ type chunkSeriesIterator struct {
 func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
 	if len(cs) == 0 {
 		// This should not happen. StoreAPI implementations should not send empty results.
-		return errSeriesIterator{err: errors.Errorf("store returned an empty result")}
+		return errSeriesIterator{err: errors.Newf("store returned an empty result")}
 	}
 	return &chunkSeriesIterator{chunks: cs}
 }

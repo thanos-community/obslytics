@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package parquet
 
 import (
@@ -5,13 +8,14 @@ import (
 	"io"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/thanos-community/obslytics/pkg/dataframe"
-	"github.com/thanos-community/obslytics/pkg/exporter"
+	"github.com/efficientgo/core/errors"
 	parquetwriter "github.com/xitongsys/parquet-go-source/writerfile"
 	"github.com/xitongsys/parquet-go/parquet"
 	"github.com/xitongsys/parquet-go/source"
 	"github.com/xitongsys/parquet-go/writer"
+
+	"github.com/thanos-community/obslytics/pkg/dataframe"
+	"github.com/thanos-community/obslytics/pkg/exporter"
 )
 
 // Compile-time check if parquet Encoder implements exporter.Encoder interface.
@@ -72,13 +76,13 @@ func initCSVWriter(parqf source.ParquetFile, df dataframe.Dataframe) (*writer.CS
 		var pqType string
 		switch c.Type {
 		case dataframe.TypeString:
-			pqType = "UTF8, encoding=PLAIN_DICTIONARY"
+			pqType = "BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"
 		case dataframe.TypeFloat:
 			pqType = "DOUBLE"
 		case dataframe.TypeUint:
-			pqType = "UINT_64"
+			pqType = "INT64, convertedtype=UINT_64"
 		case dataframe.TypeTime:
-			pqType = "TIMESTAMP_MILLIS"
+			pqType = "INT64, convertedtype=TIMESTAMP_MILLIS"
 		}
 		pqSchema = append(pqSchema, fmt.Sprintf("name=%s, type=%s", c.Name, pqType))
 	}

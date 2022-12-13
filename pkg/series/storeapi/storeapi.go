@@ -1,19 +1,23 @@
+// Copyright (c) The Thanos Community Authors.
+// Licensed under the Apache License 2.0.
+
 package storeapi
 
 import (
 	"context"
 	"io"
 
-	"github.com/go-kit/kit/log"
-	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/efficientgo/core/errors"
+	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/thanos-community/obslytics/pkg/series"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	tracing "github.com/thanos-io/thanos/pkg/tracing/client"
 	"google.golang.org/grpc"
+
+	"github.com/thanos-community/obslytics/pkg/series"
 )
 
 // Series implements input.Reader.
