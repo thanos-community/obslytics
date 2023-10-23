@@ -101,6 +101,10 @@ func (i *iterator) Next() bool {
 	}
 
 	i.currentSeries = seriesResp.GetSeries()
+	if i.currentSeries == nil {
+		i.err = errors.Errorf("Received nil series from Series Response")
+		return false
+	}
 	return true
 }
 
